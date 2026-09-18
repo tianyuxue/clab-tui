@@ -1,0 +1,34 @@
+{
+  "mini": [
+    {
+      "lab_name": "mini",
+      "labPath": "mini.clab.yml",
+      "absLabPath": "/tmp/opencode/mini.clab.yml",
+      "name": "clab-mini-r1",
+      "container_id": "3d495d344017",
+      "image": "publicmirror.azurecr.io/debian:bookworm",
+      "kind": "linux",
+      "group": "core",
+      "state": "running",
+      "status": "Up 25 seconds",
+      "ipv4_address": "172.20.20.3/24",
+      "ipv6_address": "3fff:172:20:20::3/64",
+      "owner": "jty"
+    },
+    {
+      "lab_name": "mini",
+      "labPath": "mini.clab.yml",
+      "absLabPath": "/tmp/opencode/mini.clab.yml",
+      "name": "clab-mini-r2",
+      "container_id": "5e2b75f0bb61",
+      "image": "publicmirror.azurecr.io/debian:bookworm",
+      "kind": "linux",
+      "group": "leaf",
+      "state": "running",
+      "status": "Up 25 seconds",
+      "ipv4_address": "172.20.20.2/24",
+      "ipv6_address": "3fff:172:20:20::2/64",
+      "owner": "jty"
+    }
+  ]
+}

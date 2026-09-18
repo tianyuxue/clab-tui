@@ -1,0 +1,6 @@
+name: nested-lab
+topology:
+  nodes:
+    srl1:
+      kind: nokia_srlinux
+      image: ghcr.io/nokia/srlinux:24.7.1

@@ -1,0 +1,16 @@
+name: three-node-mesh
+topology:
+  nodes:
+    srl1:
+      kind: nokia_srlinux
+      image: ghcr.io/nokia/srlinux:24.7.1
+    ceos1:
+      kind: arista_ceos
+      image: ceos:4.32.0F
+    xrd1:
+      kind: cisco_xrd
+      image: cisco-xrd:7.10.1
+  links:
+    - endpoints: ["srl1:e1-1", "ceos1:eth1"]
+    - endpoints: ["srl1:e1-2", "xrd1:Gi0/0/0/0"]
+    - endpoints: ["ceos1:eth2", "xrd1:Gi0/0/0/1"]

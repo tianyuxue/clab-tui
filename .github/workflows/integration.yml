@@ -1,0 +1,152 @@
+name: Integration
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  normal:
+    name: Unit, UI, tmux, vet, and static build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install static build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libcap-dev \
+            libdbus-1-dev \
+            libibverbs-dev \
+            libnl-3-dev \
+            libnl-route-3-dev \
+            libpcap-dev \
+            libsystemd-dev \
+            pkg-config \
+            tmux
+
+      # Keep the normal CI path non-privileged. test-all deliberately excludes
+      # integration targets, which are run only by the self-hosted job below.
+      - name: Run unit tests
+        run: make test-unit
+
+      - name: Run UI tests
+        run: make test-ui
+
+      - name: Run tmux tests
+        run: make test-tmux
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Build static binary
+        run: make build
+
+  privileged:
+    name: Scale and eBPF integration
+    # Disabled by default: without a registered [self-hosted, linux, integration]
+    # runner these jobs would queue forever on every main push and leave the
+    # whole workflow (and badge) without a status. Set the repository variable
+    # ENABLE_PRIVILEGED_CI=true once a runner is available.
+    # Never expose passwordless sudo to pull_request code, including forks.
+    # Pushes and manual dispatches are trusted only on the protected main ref;
+    # scheduled workflows resolve to the repository's default branch.
+    if: vars.ENABLE_PRIVILEGED_CI == 'true' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || github.event_name == 'schedule')
+    runs-on: [self-hosted, linux, integration]
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Verify privileged runner prerequisites
+        run: |
+          set -eu
+          # The runner account is intentionally unprivileged; sudo is checked
+          # non-interactively and used only for the commands that need it.
+          test "$(id -u)" -ne 0
+          sudo -n true
+          command -v docker
+          command -v containerlab
+          docker info
+          go version
+          containerlab version
+          uname -a
+          test -r /sys/kernel/btf/vmlinux
+
+      - name: Run scale integration
+        run: |
+          set -o pipefail
+          sudo env PATH="$PATH" make test-integration-scale 2>&1 | tee integration-scale.log
+
+      # Keep the workflow's eBPF coverage narrow. The compatibility target
+      # test-ebpf intentionally runs the complete integration package suite.
+      - name: Run focused eBPF integration
+        run: |
+          set -o pipefail
+          sudo env PATH="$PATH" make test-ebpf-focused 2>&1 | tee integration-ebpf.log
+
+      - name: Run integration suite
+        run: |
+          set -o pipefail
+          sudo env PATH="$PATH" make test-integration 2>&1 | tee integration.log
+
+      - name: Upload failed integration logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: privileged-integration-logs
+          path: '*integration*.log'
+          if-no-files-found: ignore
+
+  kind-matrix:
+    name: Optional kind matrix
+    # Manual runs are also pinned to main because this job uses sudo on the
+    # self-hosted runner. Optional means optional execution, not arbitrary refs.
+    # Gated by ENABLE_PRIVILEGED_CI for the same reason as the job above.
+    if: vars.ENABLE_PRIVILEGED_CI == 'true' && ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || github.event_name == 'schedule')
+    runs-on: [self-hosted, linux, integration]
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run kind matrix
+        run: |
+          set -o pipefail
+          sudo env PATH="$PATH" make test-integration-kinds 2>&1 | tee integration-kinds.log
+
+      - name: Upload failed kind logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kind-matrix-logs
+          path: '*integration*.log'
+          if-no-files-found: ignore

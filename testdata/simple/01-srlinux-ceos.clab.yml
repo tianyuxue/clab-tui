@@ -1,0 +1,11 @@
+name: srlinux-ceos-lab
+topology:
+  nodes:
+    srl1:
+      kind: nokia_srlinux
+      image: ghcr.io/nokia/srlinux:24.7.1
+    ceos1:
+      kind: arista_ceos
+      image: ceos:4.32.0F
+  links:
+    - endpoints: ["srl1:e1-1", "ceos1:eth1"]

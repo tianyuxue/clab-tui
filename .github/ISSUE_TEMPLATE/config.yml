@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: containerlab documentation
+    url: https://containerlab.dev
+    about: Installation and topology file reference for containerlab itself.
+  - name: Security report
+    url: https://github.com/tianyuxue/clab-tui/security/advisories/new
+    about: Please report vulnerabilities privately.

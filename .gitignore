@@ -1,0 +1,6 @@
+/dist
+/clab-tui
+.worktrees/
+/.internal/
+*.exe
+.DS_Store

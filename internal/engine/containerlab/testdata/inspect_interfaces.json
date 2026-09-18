@@ -1,0 +1,10 @@
+[
+  {
+    "name": "clab-mini-r1",
+    "interfaces": [
+      { "name": "eth0", "alias": "", "mac": "d6:5e:cf:2a:52:41", "ifindex": 2, "mtu": 1500, "type": "veth", "state": "up" },
+      { "name": "eth1", "alias": "", "mac": "aa:c1:ab:34:e6:6a", "ifindex": 12, "mtu": 9500, "type": "veth", "state": "up" },
+      { "name": "lo", "alias": "", "mac": "", "ifindex": 1, "mtu": 65536, "type": "device", "state": "unknown" }
+    ]
+  }
+]

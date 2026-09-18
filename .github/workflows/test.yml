@@ -1,0 +1,26 @@
+name: clab-tui tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libpcap-dev libcap-dev libsystemd-dev libdbus-1-dev \
+            libibverbs-dev libnl-3-dev libnl-route-3-dev pkg-config
+      - name: Test
+        run: make test-unit
+      - name: Vet
+        run: go vet ./...
+      - name: Build
+        run: make build-dynamic

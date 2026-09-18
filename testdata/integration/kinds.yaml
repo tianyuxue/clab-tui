@@ -1,0 +1,13 @@
+kinds:
+  - name: linux
+    image: alpine:3.20
+    profile: required
+    license_free: true
+    interface: eth1
+    timeout_seconds: 120
+  - name: nokia_srlinux
+    image: ghcr.io/nokia/srlinux:24.7.1
+    profile: required
+    license_free: true
+    interface: e1-1
+    timeout_seconds: 300

@@ -1,0 +1,118 @@
+name: big-20-node-lab
+topology:
+  nodes:
+    core-01:
+      group: core
+      kind: nokia_srlinux
+      image: ghcr.io/nokia/srlinux:24.7.1
+    core-02:
+      group: core
+      kind: nokia_srlinux
+      image: ghcr.io/nokia/srlinux:24.7.1
+    spine-01:
+      group: spine
+      kind: arista_ceos
+      image: ceos:4.32.0F
+    spine-02:
+      group: spine
+      kind: arista_ceos
+      image: ceos:4.32.0F
+    agg-01:
+      group: agg
+      kind: cisco_xrd
+      image: cisco-xrd:7.10.1
+    agg-02:
+      group: agg
+      kind: cisco_xrd
+      image: cisco-xrd:7.10.1
+    agg-03:
+      group: agg
+      kind: cisco_xrd
+      image: cisco-xrd:7.10.1
+    agg-04:
+      group: agg
+      kind: cisco_xrd
+      image: cisco-xrd:7.10.1
+    leaf-01:
+      group: leaf
+      kind: juniper_vjunosswitch
+      image: juniper/vjunosswitch:24.2R1
+    leaf-02:
+      group: leaf
+      kind: juniper_vjunosswitch
+      image: juniper/vjunosswitch:24.2R1
+    leaf-03:
+      group: leaf
+      kind: juniper_vjunosswitch
+      image: juniper/vjunosswitch:24.2R1
+    leaf-04:
+      group: leaf
+      kind: juniper_vjunosswitch
+      image: juniper/vjunosswitch:24.2R1
+    leaf-05:
+      group: leaf
+      kind: juniper_vjunosswitch
+      image: juniper/vjunosswitch:24.2R1
+    leaf-06:
+      group: leaf
+      kind: juniper_vjunosswitch
+      image: juniper/vjunosswitch:24.2R1
+    host-01:
+      group: host
+      kind: nokia_srlinux
+      image: ghcr.io/nokia/srlinux:24.7.1
+    host-02:
+      group: host
+      kind: nokia_srlinux
+      image: ghcr.io/nokia/srlinux:24.7.1
+    host-03:
+      group: host
+      kind: nokia_srlinux
+      image: ghcr.io/nokia/srlinux:24.7.1
+    host-04:
+      group: host
+      kind: nokia_srlinux
+      image: ghcr.io/nokia/srlinux:24.7.1
+    host-05:
+      group: host
+      kind: nokia_srlinux
+      image: ghcr.io/nokia/srlinux:24.7.1
+    host-06:
+      group: host
+      kind: nokia_srlinux
+      image: ghcr.io/nokia/srlinux:24.7.1
+  links:
+    - endpoints: ["core-01:eth1", "spine-01:eth1"]
+    - endpoints: ["core-01:eth1", "spine-02:eth1"]
+    - endpoints: ["core-02:eth1", "spine-01:eth1"]
+    - endpoints: ["core-02:eth1", "spine-02:eth1"]
+    - endpoints: ["spine-01:eth1", "agg-01:eth1"]
+    - endpoints: ["spine-01:eth1", "agg-02:eth1"]
+    - endpoints: ["spine-01:eth1", "agg-03:eth1"]
+    - endpoints: ["spine-01:eth1", "agg-04:eth1"]
+    - endpoints: ["spine-02:eth1", "agg-01:eth1"]
+    - endpoints: ["spine-02:eth1", "agg-02:eth1"]
+    - endpoints: ["spine-02:eth1", "agg-03:eth1"]
+    - endpoints: ["spine-02:eth1", "agg-04:eth1"]
+    - endpoints: ["agg-01:eth1", "leaf-02:eth1"]
+    - endpoints: ["agg-01:eth1", "leaf-03:eth1"]
+    - endpoints: ["agg-01:eth1", "leaf-04:eth1"]
+    - endpoints: ["agg-02:eth1", "leaf-02:eth1"]
+    - endpoints: ["agg-02:eth1", "leaf-03:eth1"]
+    - endpoints: ["agg-02:eth1", "leaf-04:eth1"]
+    - endpoints: ["agg-02:eth1", "leaf-05:eth1"]
+    - endpoints: ["agg-02:eth1", "leaf-06:eth1"]
+    - endpoints: ["agg-03:eth1", "leaf-01:eth1"]
+    - endpoints: ["agg-03:eth1", "leaf-02:eth1"]
+    - endpoints: ["agg-03:eth1", "leaf-04:eth1"]
+    - endpoints: ["agg-03:eth1", "leaf-05:eth1"]
+    - endpoints: ["agg-03:eth1", "leaf-06:eth1"]
+    - endpoints: ["agg-04:eth1", "leaf-02:eth1"]
+    - endpoints: ["agg-04:eth1", "leaf-05:eth1"]
+    - endpoints: ["agg-04:eth1", "leaf-06:eth1"]
+    - endpoints: ["leaf-01:eth1", "host-01:eth1"]
+    - endpoints: ["leaf-02:eth1", "host-02:eth1"]
+    - endpoints: ["leaf-03:eth1", "host-03:eth1"]
+    - endpoints: ["leaf-04:eth1", "host-04:eth1"]
+    - endpoints: ["leaf-05:eth1", "host-05:eth1"]
+    - endpoints: ["leaf-06:eth1", "host-06:eth1"]
