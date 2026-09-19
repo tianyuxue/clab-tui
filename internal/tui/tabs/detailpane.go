@@ -49,7 +49,7 @@ func (p *DetailPane) View() string {
 	var b strings.Builder
 	b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212")).Render(p.node.Name) + "\n\n")
 	b.WriteString("  Container: " + p.node.Container + "\n")
-	b.WriteString("  Image:     " + imageTag(p.node.Image) + "\n")
+	b.WriteString("  Image:     " + p.node.Image + "\n")
 	b.WriteString("  State:     " + stateText(p.node.State) + "\n")
 	if !p.node.StartedAt.IsZero() {
 		b.WriteString("  Uptime:    " + formatUptime(p.node.StartedAt) + "\n")
@@ -125,17 +125,6 @@ func stateText(s engine.Status) string {
 		style = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	}
 	return style.Render(string(s))
-}
-
-// imageTag returns the tag part of an image reference ("repo:tag" → "tag").
-func imageTag(image string) string {
-	if i := strings.LastIndex(image, "/"); i >= 0 {
-		image = image[i+1:]
-	}
-	if i := strings.LastIndex(image, ":"); i >= 0 {
-		return image[i+1:]
-	}
-	return image
 }
 
 // formatUptime renders a StartedAt as "Xh Ym" duration.

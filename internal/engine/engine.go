@@ -255,6 +255,14 @@ type InterfaceIPProvider interface {
 	InterfaceIPs(ctx context.Context, labName, nodeName string) (map[string]string, error)
 }
 
+// LiveRefresher re-reads live state from the substrate on demand. It lets the
+// UI reflect lifecycle changes (node start/stop/deploy) even when the event
+// stream is unavailable, e.g. a non-root containerlab whose `events` command
+// needs privileges. Implementations must be safe to call repeatedly.
+type LiveRefresher interface {
+	RefreshLive(ctx context.Context) error
+}
+
 // SessionManager lives in session.go. It is an optional capability: type-assert
 // an Engine against it to manage live interactive sessions.
 

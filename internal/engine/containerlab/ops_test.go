@@ -83,6 +83,40 @@ func TestEngineGetLabMergesTopology(t *testing.T) {
 	}
 }
 
+func TestEngineGetLabUndeployedNodeStopped(t *testing.T) {
+	e := newTestEngine(t)
+	defer e.Close()
+
+	lab, err := e.GetLab(context.Background(), "mini")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lab.Nodes) != 1 {
+		t.Fatalf("expected 1 node, got %d", len(lab.Nodes))
+	}
+	if lab.Nodes[0].State != engine.StatusStopped {
+		t.Fatalf("undeployed node state = %q, want %q", lab.Nodes[0].State, engine.StatusStopped)
+	}
+}
+
+func TestMergeLabStateUsesLiveImageWhenStaticEmpty(t *testing.T) {
+	static := &engine.Lab{Nodes: []engine.Node{{Name: "r1"}}}
+	live := &engine.Lab{Nodes: []engine.Node{{Name: "r1", Image: "debian:bookworm"}}}
+	mergeLabState(static, live)
+	if static.Nodes[0].Image != "debian:bookworm" {
+		t.Fatalf("image = %q, want live image", static.Nodes[0].Image)
+	}
+}
+
+func TestMergeLabStateKeepsStaticImage(t *testing.T) {
+	static := &engine.Lab{Nodes: []engine.Node{{Name: "r1", Image: "custom:1"}}}
+	live := &engine.Lab{Nodes: []engine.Node{{Name: "r1", Image: "other:2"}}}
+	mergeLabState(static, live)
+	if static.Nodes[0].Image != "custom:1" {
+		t.Fatalf("image = %q, want static image preserved", static.Nodes[0].Image)
+	}
+}
+
 func TestEngineMissingLab(t *testing.T) {
 	e := newTestEngine(t)
 	defer e.Close()

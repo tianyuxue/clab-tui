@@ -1334,6 +1334,36 @@ func (f *fakeEngine) StreamNodeLogs(ctx context.Context, labName, nodeName strin
 	return ch, nil
 }
 
+// refreshFakeEngine records LiveRefresher calls so tests can assert that a
+// completed operation re-reads live state.
+type refreshFakeEngine struct {
+	*fakeEngine
+	refreshed int
+}
+
+func (f *refreshFakeEngine) RefreshLive(context.Context) error {
+	f.refreshed++
+	return nil
+}
+
+func TestOpCompletionRefreshesLiveState(t *testing.T) {
+	fe := &refreshFakeEngine{fakeEngine: newFakeEngine()}
+	m := New(fe, nil)
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+
+	_, cmd := m.Update(opLineMsg{Line: engine.OutputLine{Done: true}})
+	if cmd == nil {
+		t.Fatal("expected a command after operation completion")
+	}
+	msg := cmd()
+	if fe.refreshed != 1 {
+		t.Fatalf("RefreshLive called %d times, want 1", fe.refreshed)
+	}
+	if _, ok := msg.(operationRefreshedMsg); !ok {
+		t.Fatalf("expected operationRefreshedMsg, got %T", msg)
+	}
+}
+
 func TestDigitSwitchesTab(t *testing.T) {
 	m := New(nil, nil)
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})

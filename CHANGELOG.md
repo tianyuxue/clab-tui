@@ -10,6 +10,25 @@ Releases before the public launch are not published; see the
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-19
+
+### Added
+
+- `make install` and `make uninstall` targets. The binary installs to
+  `~/.local/bin` by default; override with `BINDIR=/path`.
+
+### Fixed
+
+- Node detail pane now shows the full container image reference (e.g.
+  `ghcr.io/nokia/srlinux:24.7.1`) instead of only the image tag.
+- Undeployed labs report node state `stopped` (and links `down`) instead of
+  `unknown`.
+- Node state is re-read from `containerlab inspect` after lifecycle operations
+  (start/stop/restart/deploy), so it stays accurate even when the event stream
+  is unavailable, such as a non-root containerlab without SUID.
+
+## [0.1.0] - 2026-09-18
+
 ### Added
 
 - English and Simplified Chinese project documentation under `docs/`.

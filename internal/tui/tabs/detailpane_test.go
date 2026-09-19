@@ -21,7 +21,7 @@ func TestDetailPaneRendersNodeInfo(t *testing.T) {
 	})
 	p.SetMonitor(&engine.NodeMonitor{CPUPercent: 3.5, MemUsed: 128 << 20, MemLimit: 1 << 30})
 	v := p.View()
-	for _, want := range []string{"srl1", "clab-lab-srl1", "24.7.1", "3.5%", "128"} {
+	for _, want := range []string{"srl1", "clab-lab-srl1", "ghcr.io/nokia/srlinux:24.7.1", "3.5%", "128"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("expected %q in detail pane:\n%s", want, v)
 		}
@@ -117,19 +117,5 @@ func TestDetailPaneStateColored(t *testing.T) {
 	p.SetNode(&engine.Node{Name: "r1", State: engine.StatusStopped})
 	if !strings.Contains(p.View(), "38;5;196") {
 		t.Fatalf("expected red state:\n%s", p.View())
-	}
-}
-
-func TestImageTag(t *testing.T) {
-	cases := map[string]string{
-		"ghcr.io/nokia/srlinux:24.7.1": "24.7.1",
-		"ceos:4.32.0F":                 "4.32.0F",
-		"debian:bookworm":              "bookworm",
-		"no-tag-image":                 "no-tag-image",
-	}
-	for in, want := range cases {
-		if got := imageTag(in); got != want {
-			t.Fatalf("imageTag(%q)=%q, want %q", in, got, want)
-		}
 	}
 }

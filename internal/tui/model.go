@@ -575,9 +575,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.opsView.AppendLine(msg.Line)
 		if msg.Line.Done {
 			m.currentOpCh = nil
-			return m, loadLabs(m.eng)
+			return m, m.afterOperation()
 		}
 		return m, runOperation(m.currentOpCh)
+
+	case operationRefreshedMsg:
+		cmds := []tea.Cmd{loadLabs(m.eng)}
+		if m.curTopoLab != "" {
+			cmds = append(cmds, loadTopology(m.eng, m.curTopoLab))
+		}
+		return m, tea.Batch(cmds...)
 
 	case sessionOutputMsg:
 		m.sessionModel.Feed(msg.ID, msg.Data)
@@ -675,6 +682,25 @@ func (m *Model) initLabPicker() tea.Cmd {
 	}
 	m.labPicker.Show(m.labs)
 	return nil
+}
+
+// operationRefreshedMsg is emitted after a lifecycle operation completes and
+// live state has been re-read from the engine.
+type operationRefreshedMsg struct{}
+
+// afterOperation re-reads live state after a lifecycle operation and triggers a
+// lab/topology reload. Engines without a usable event stream (for example a
+// non-root containerlab, whose `events` command needs privileges) rely on this
+// to reflect node start/stop changes.
+func (m *Model) afterOperation() tea.Cmd {
+	return func() tea.Msg {
+		if m.eng != nil {
+			if r, ok := m.eng.(engine.LiveRefresher); ok {
+				_ = r.RefreshLive(context.Background())
+			}
+		}
+		return operationRefreshedMsg{}
+	}
 }
 
 // maybeLoadTopology returns a command that reloads the current lab's topology
@@ -1537,8 +1563,8 @@ func truncateRunes(s string, limit int) string {
 
 var (
 	helpBarStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("241")).
-			Padding(0, 1)
+		Foreground(lipgloss.Color("241")).
+		Padding(0, 1)
 )
 
 func (m *Model) nextTab() {

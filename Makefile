@@ -1,4 +1,5 @@
 BINARY=clab-tui
+BINDIR?=$(HOME)/.local/bin
 GOBUILD=go build
 GOTEST=go test
 GOMOD=$(GOBUILD) ./...
@@ -7,7 +8,7 @@ VERSION_LDFLAGS=-X main.version=$(VERSION)
 STATIC_CGO_LDFLAGS=$(shell pkg-config --static --libs libpcap libcap 2>/dev/null)
 STATIC_LDFLAGS=$(VERSION_LDFLAGS) -linkmode external -extldflags "-static"
 
-.PHONY: all build build-static build-dynamic test test-unit test-ui test-tmux integration-base-prereqs integration-prereqs integration-scale-prereqs integration-kind-prereqs test-integration test-integration-full test-integration-smoke test-integration-scale test-integration-kinds test-integration-all test-ebpf test-ebpf-focused test-all update-golden clean lint fmt run vet run-testdata run-demo
+.PHONY: all build build-static build-dynamic install uninstall test test-unit test-ui test-tmux integration-base-prereqs integration-prereqs integration-scale-prereqs integration-kind-prereqs test-integration test-integration-full test-integration-smoke test-integration-scale test-integration-kinds test-integration-all test-ebpf test-ebpf-focused test-all update-golden clean lint fmt run vet run-testdata run-demo
 
 all: fmt lint test build
 
@@ -24,6 +25,15 @@ build-static:
 # Development fallback when static system libraries are unavailable.
 build-dynamic:
 	$(GOBUILD) -ldflags "$(VERSION_LDFLAGS)" -o $(BINARY) ./cmd/$(BINARY)/
+
+install: build
+	@mkdir -p "$(BINDIR)"
+	install -m 0755 $(BINARY) "$(BINDIR)/$(BINARY)"
+	@echo "installed $(BINARY) -> $(BINDIR)/$(BINARY)"
+
+uninstall:
+	@rm -f "$(BINDIR)/$(BINARY)"
+	@echo "removed $(BINDIR)/$(BINARY)"
 
 test:
 	$(GOTEST) ./...

@@ -131,6 +131,20 @@ func (e *ClabEngine) Subscribe() (<-chan engine.Change, func()) {
 	return e.store.Subscribe()
 }
 
+// RefreshLive re-reads live state by re-running `containerlab inspect`. This
+// keeps node state accurate after lifecycle operations when the event stream
+// is unavailable (e.g. non-root without containerlab SUID).
+func (e *ClabEngine) RefreshLive(ctx context.Context) error {
+	e.mu.Lock()
+	started := e.start
+	e.mu.Unlock()
+	if !started {
+		return e.ensureStarted(ctx)
+	}
+	e.seedFromInspect(ctx)
+	return nil
+}
+
 // GetLab merges static topology from .clab.yml with live node state.
 func (e *ClabEngine) GetLab(ctx context.Context, labName string) (*engine.Lab, error) {
 	topo, err := e.findTopoFile(labName)
@@ -152,10 +166,9 @@ func (e *ClabEngine) GetLab(ctx context.Context, labName string) (*engine.Lab, e
 			lab.Links = snap.Links
 		}
 	} else {
-		// Lab is not deployed: its links are genuinely down, not unknown.
-		for i := range lab.Links {
-			lab.Links[i].State = engine.LinkDown
-		}
+		// Lab is not deployed: nodes are stopped and links are genuinely
+		// down, not unknown.
+		markUndeployed(lab)
 	}
 	return lab, nil
 }
@@ -262,7 +275,25 @@ func mergeLabState(static, live *engine.Lab) *engine.Lab {
 			static.Nodes[i].StartedAt = ln.StartedAt
 			static.Nodes[i].Interfaces = ln.Interfaces
 			static.Nodes[i].Container = ln.Container
+			if static.Nodes[i].Image == "" {
+				static.Nodes[i].Image = ln.Image
+			}
 		}
 	}
 	return static
+}
+
+// markUndeployed marks a lab that has no live containers: every node is
+// stopped and every link is down. This distinguishes an undeployed lab from
+// genuinely unknown live state (e.g. no containerlab privileges at all).
+func markUndeployed(lab *engine.Lab) {
+	if lab == nil {
+		return
+	}
+	for i := range lab.Nodes {
+		lab.Nodes[i].State = engine.StatusStopped
+	}
+	for i := range lab.Links {
+		lab.Links[i].State = engine.LinkDown
+	}
 }
