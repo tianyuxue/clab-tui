@@ -104,7 +104,7 @@ func (m *SessionModel) RemoveSession(id string) bool {
 
 // SessionLabels returns the letter label for each live session (normal mode
 // quick-switch). Letters are first-letter-deduped, skipping reserved keys.
-// 's' is reserved too: in normal mode it opens the session picker.
+// 's' is reserved because normal mode uses it to open the session picker.
 func (m *SessionModel) SessionLabels() []string {
 	titles := make([]string, len(m.sessions))
 	for i, s := range m.sessions {
@@ -244,18 +244,31 @@ func (m *SessionModel) View() string {
 
 	var bar strings.Builder
 	labels := m.SessionLabels()
+	// Match the tab bar: the active entry is bold pink with a red label
+	// letter; inactive entries are dim grey. Foreground-only so it reads the
+	// same as a selected tab (no background fill).
+	inactiveBase := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	activeBase := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
+	activeLabel := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196"))
 	for i, s := range m.sessions {
 		title := s.Handle.Title
 		label := ""
 		if i < len(labels) {
 			label = labels[i]
 		}
-		display := highlightLabel(title, label)
-		style := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-		if i == m.active {
-			style = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
+		before, letter, after := splitLabel(title, label)
+		var display string
+		switch {
+		case letter == "" && i == m.active:
+			display = activeBase.Render(title)
+		case letter == "":
+			display = inactiveBase.Render(title)
+		case i == m.active:
+			display = activeBase.Render(before) + activeLabel.Render(letter) + activeBase.Render(after)
+		default:
+			display = inactiveBase.Render(before) + keyLabelStyle.Render(letter) + inactiveBase.Render(after)
 		}
-		bar.WriteString(style.Render(display) + "  ")
+		bar.WriteString(display + "  ")
 	}
 	modeHint := "INSERT"
 	if m.mode == SessionNormal {
@@ -347,8 +360,11 @@ func renderTermRowWithCursor(t vt10x.View, y, cols, curX int) string {
 		}
 		fg, bg := g.FG, g.BG
 		if x == curX {
-			// Reverse video: swap fg/bg so the cursor cell stands out.
-			fg, bg = bg, fg
+			// Solid white block with black text so the cursor is clearly
+			// visible regardless of the cell's own colors. Reversing the
+			// cell's fg/bg produced a grey block because vt10x's Default*
+			// sentinels are not real palette colors.
+			fg, bg = vt10x.Color(0), vt10x.Color(15)
 		}
 		if fg != curFg || bg != curBg {
 			sb.WriteString(colorSeq(fg, bg))

@@ -8,6 +8,27 @@ import (
 	"github.com/muesli/termenv"
 )
 
+func TestSplitLabel(t *testing.T) {
+	cases := []struct {
+		name, label string
+		before, mid string
+		after       string
+	}{
+		{"SSH", "s", "", "S", "SH"},
+		{"clab-lab-r1", "l", "c", "l", "ab-lab-r1"},
+		{"r1", "", "r1", "", ""},
+		{"r1", "z", "r1", "", ""},
+		{"srv2", "v", "sr", "v", "2"},
+	}
+	for _, c := range cases {
+		b, m, a := splitLabel(c.name, c.label)
+		if b != c.before || m != c.mid || a != c.after {
+			t.Fatalf("splitLabel(%q,%q)=(%q,%q,%q), want (%q,%q,%q)",
+				c.name, c.label, b, m, a, c.before, c.mid, c.after)
+		}
+	}
+}
+
 func TestHighlightLabelEmptyLabel(t *testing.T) {
 	if got := highlightLabel("SSH", ""); got != "SSH" {
 		t.Fatalf("empty label: got %q, want SSH", got)

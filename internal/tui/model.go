@@ -395,6 +395,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.searchInput.Show()
 			}
 			return m, nil
+		case "toggle-conns":
+			m.devTree.ToggleAll()
+			return m, nil
 		case "session-picker":
 			m.sessionPicker.Show(m.sessionModel.SessionsHandles())
 			return m, nil
@@ -739,6 +742,7 @@ func (m *Model) buildWhichKeyRoot() []tabs.MenuNode {
 			{Label: "Trace", DirectKey: "t", ActionID: "trace"},
 			{Label: "Filter", DirectKey: "f", ActionID: "filter"},
 			{Label: "Search", DirectKey: "/", ActionID: "search"},
+			{Label: "Toggle Details", DirectKey: "x", ActionID: "toggle-conns"},
 		}
 	case tabSessions:
 		return []tabs.MenuNode{
@@ -1485,7 +1489,7 @@ func renderHelpBar(m *Model, showAll bool) string {
 		}
 		if m.activeTab == tabSessions && m.sessionModel.HasSessions() {
 			bindings = append(bindings,
-				key.NewBinding(key.WithKeys("ctrl+\\"), key.WithHelp("ctrl+\\", "to insert")))
+				key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "to insert")))
 		} else {
 			bindings = append(bindings, Keys.Quit)
 		}

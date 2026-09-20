@@ -10,6 +10,22 @@ Releases before the public launch are not published; see the
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-20
+
+### Added
+
+- Topology space menu now lists "Toggle Details" (`x`) after Search, so the
+  expand/collapse shortcut is discoverable.
+
+### Fixed
+
+- Sessions tab: the normal-mode hint now shows `enter` to return to insert mode
+  (previously it incorrectly showed `ctrl+\`).
+- Sessions tab: the selected session is highlighted with the same
+  foreground-only style as the active tab, so the current session is clear.
+- Sessions tab: the terminal cursor renders as a solid white block instead of a
+  grey block that was hard to see.
+
 ## [0.1.1] - 2026-09-19
 
 ### Added

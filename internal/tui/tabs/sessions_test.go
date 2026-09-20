@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/hinshun/vt10x"
 	"github.com/muesli/termenv"
 
 	"github.com/tianyuxue/clab-tui/internal/engine"
@@ -146,6 +147,26 @@ func TestSessionModelSessionLabels(t *testing.T) {
 	// 's' is reserved (picker) so "srv2" falls back to its second letter 'v'.
 	if len(labels) != 2 || labels[0] != "r" || labels[1] != "v" {
 		t.Fatalf("expected labels [r v], got %v", labels)
+	}
+}
+
+func TestSessionModelNormalModeEnterEntersInsert(t *testing.T) {
+	sm, _, _ := newSession(t, "s1")
+	sm.SetMode(SessionNormal)
+	sm.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if !sm.IsInsert() {
+		t.Fatal("expected Enter to enter insert mode")
+	}
+}
+
+func TestRenderTermRowWithCursorUsesWhiteBlock(t *testing.T) {
+	term := vt10x.New(vt10x.WithSize(10, 3))
+	if _, err := term.Write([]byte("hello")); err != nil {
+		t.Fatal(err)
+	}
+	row := renderTermRowWithCursor(term, 0, 10, 2)
+	if !strings.Contains(row, "\x1b[38;5;0;48;5;15m") {
+		t.Fatalf("expected white block cursor SGR, got %q", row)
 	}
 }
 

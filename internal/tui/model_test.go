@@ -780,6 +780,9 @@ func TestRenderHelpBarSessionsInsertModeShowsOnlyModeSwitch(t *testing.T) {
 	if !strings.Contains(s2, "to insert") {
 		t.Fatalf("expected mode-switch hint in normal mode, got %q", s2)
 	}
+	if strings.Contains(s2, "ctrl+\\") {
+		t.Fatalf("normal mode must not advertise ctrl+\\ for insert, got %q", s2)
+	}
 }
 
 func TestRenderHelpBarKeepsQuitAndShowsTraceControls(t *testing.T) {
@@ -2364,6 +2367,32 @@ func TestWhichKeySearchActionOpensSearchInput(t *testing.T) {
 	}
 	if cmd != nil {
 		t.Fatalf("expected no command, got %+v", cmd)
+	}
+}
+
+func TestWhichKeyTopologyToggleAfterSearch(t *testing.T) {
+	m := New(nil, nil)
+	m.activeTab = tabTopology
+	root := m.buildWhichKeyRoot()
+	if len(root) < 2 {
+		t.Fatalf("unexpected which-key root: %+v", root)
+	}
+	prev, last := root[len(root)-2], root[len(root)-1]
+	if prev.Label != "Search" || last.Label != "Toggle Details" ||
+		last.DirectKey != "x" || last.ActionID != "toggle-conns" {
+		t.Fatalf("expected Toggle Details (x) after Search, got %q then %q/%q/%q",
+			prev.Label, last.Label, last.DirectKey, last.ActionID)
+	}
+}
+
+func TestWhichKeyToggleDetailsAction(t *testing.T) {
+	m := New(nil, nil)
+	m.activeTab = tabTopology
+	m.devTree.SetTopology(&engine.Lab{Nodes: []engine.Node{{Name: "r1"}}})
+	result, cmd := m.Update(tabs.ActionSelectedMsg{Item: tabs.ActionItem{ID: "toggle-conns"}})
+	m = result.(*Model)
+	if cmd != nil {
+		t.Fatalf("expected no command from toggle-conns, got %+v", cmd)
 	}
 }
 
