@@ -19,7 +19,7 @@ clab-tui 不捆绑 containerlab。请先安装以下内容：
 后安装：
 
 ```bash
-VERSION=v0.1.0
+VERSION=v0.1.3
 curl -fsSLO "https://github.com/tianyuxue/clab-tui/releases/download/${VERSION}/clab-tui_${VERSION}_linux_amd64.tar.gz"
 curl -fsSLO "https://github.com/tianyuxue/clab-tui/releases/download/${VERSION}/checksums.txt"
 sha256sum -c checksums.txt

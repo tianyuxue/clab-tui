@@ -1,5 +1,8 @@
 name: Release
 
+# Release checklist: the install examples pin a concrete version. Before
+# pushing a new tag, update VERSION= in:
+#   README.md, README.zh-CN.md, docs/getting-started.md, docs/zh-CN/getting-started.md
 on:
   push:
     tags:

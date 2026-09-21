@@ -50,7 +50,7 @@ Download the latest archive from the
 the binary on your `PATH`:
 
 ```bash
-VERSION=v0.1.0
+VERSION=v0.1.3
 curl -fsSLO "https://github.com/tianyuxue/clab-tui/releases/download/${VERSION}/clab-tui_${VERSION}_linux_amd64.tar.gz"
 curl -fsSLO "https://github.com/tianyuxue/clab-tui/releases/download/${VERSION}/checksums.txt"
 sha256sum -c checksums.txt

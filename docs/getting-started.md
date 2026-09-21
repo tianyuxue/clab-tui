@@ -19,7 +19,7 @@ Download from the [Releases](https://github.com/tianyuxue/clab-tui/releases) pag
 verify the checksum, and install:
 
 ```bash
-VERSION=v0.1.0
+VERSION=v0.1.3
 curl -fsSLO "https://github.com/tianyuxue/clab-tui/releases/download/${VERSION}/clab-tui_${VERSION}_linux_amd64.tar.gz"
 curl -fsSLO "https://github.com/tianyuxue/clab-tui/releases/download/${VERSION}/checksums.txt"
 sha256sum -c checksums.txt
