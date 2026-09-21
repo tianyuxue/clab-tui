@@ -86,6 +86,35 @@ func TestSessionModelInsertModeWritesToStdin(t *testing.T) {
 	}
 }
 
+func TestCloseOtherLabs(t *testing.T) {
+	sm := NewSessionModel()
+	sm.SetSize(80, 24)
+	closedCalled := 0
+	sm.AddSession(&engine.SessionHandle{ID: "s1", LabName: "labA", Title: "a", NodeName: "a",
+		Close: func() error { closedCalled++; return nil }})
+	sm.AddSession(&engine.SessionHandle{ID: "s2", LabName: "labB", Title: "b", NodeName: "b"})
+
+	if got := sm.CloseOtherLabs("labB"); got != 1 {
+		t.Fatalf("CloseOtherLabs closed %d, want 1", got)
+	}
+	if closedCalled != 1 {
+		t.Fatalf("expected handle Close called once, got %d", closedCalled)
+	}
+	sessions := sm.Sessions()
+	if len(sessions) != 1 || sessions[0].Handle.ID != "s2" {
+		t.Fatalf("expected only labB session kept, got %+v", sessions)
+	}
+}
+
+func TestAddSessionStartsInsert(t *testing.T) {
+	sm, _, _ := newSession(t, "s1")
+	sm.SetMode(SessionNormal)
+	sm.AddSession(&engine.SessionHandle{ID: "s2", Title: "sw2", NodeName: "sw2"})
+	if !sm.IsInsert() {
+		t.Fatal("expected a newly added session to start in insert mode")
+	}
+}
+
 func TestSessionModelNormalModeEnterFocuses(t *testing.T) {
 	sm, _, _ := newSession(t, "s1")
 	sm.SetMode(SessionNormal)
@@ -99,13 +128,13 @@ func TestSessionModelNormalModeLetterSwitches(t *testing.T) {
 	sm, _, _ := newSession(t, "s1") // Title "r1"
 	sm.AddSession(&engine.SessionHandle{ID: "s2", Title: "switch1", NodeName: "switch1"})
 	sm.SetMode(SessionNormal)
-	sm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
+	sm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
 	if got := sm.Active().Handle.NodeName; got != "r1" {
-		t.Fatalf("expected active r1 after r, got %s", got)
+		t.Fatalf("expected active r1 after a, got %s", got)
 	}
-	sm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("w")})
+	sm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
 	if got := sm.Active().Handle.NodeName; got != "switch1" {
-		t.Fatalf("expected active switch1 after w, got %s", got)
+		t.Fatalf("expected active switch1 after b, got %s", got)
 	}
 }
 
@@ -122,10 +151,10 @@ func TestSessionModelNormalModeLetterSwitch(t *testing.T) {
 	sm, _, _ := newSession(t, "s1") // Title "r1"
 	sm.AddSession(&engine.SessionHandle{ID: "s2", Title: "switch1", NodeName: "switch1"})
 	sm.SetMode(SessionNormal)
-	// Titles "r1","switch1" → labels r, w ('s' is reserved for the picker)
-	sm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("w")})
+	// Labels come from the fixed pool in open order: a, b.
+	sm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
 	if got := sm.Active().Handle.NodeName; got != "switch1" {
-		t.Fatalf("expected active switch1 after letter w, got %s", got)
+		t.Fatalf("expected active switch1 after letter b, got %s", got)
 	}
 }
 
@@ -144,9 +173,9 @@ func TestSessionModelSessionLabels(t *testing.T) {
 	sm, _, _ := newSession(t, "s1") // Title "r1"
 	sm.AddSession(&engine.SessionHandle{ID: "s2", Title: "srv2", NodeName: "srv2"})
 	labels := sm.SessionLabels()
-	// 's' is reserved (picker) so "srv2" falls back to its second letter 'v'.
-	if len(labels) != 2 || labels[0] != "r" || labels[1] != "v" {
-		t.Fatalf("expected labels [r v], got %v", labels)
+	// Fixed pool in open order, so device-name prefixes cannot collide.
+	if len(labels) != 2 || labels[0] != "a" || labels[1] != "b" {
+		t.Fatalf("expected labels [a b], got %v", labels)
 	}
 }
 
@@ -156,6 +185,19 @@ func TestSessionModelNormalModeEnterEntersInsert(t *testing.T) {
 	sm.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if !sm.IsInsert() {
 		t.Fatal("expected Enter to enter insert mode")
+	}
+}
+
+func TestSessionViewShowsNodeName(t *testing.T) {
+	sm := NewSessionModel()
+	sm.SetSize(80, 24)
+	sm.AddSession(&engine.SessionHandle{ID: "s1", Title: "clab-srlinux-ceos-lab-ceos1", NodeName: "ceos1"})
+	v := sm.View()
+	if !strings.Contains(v, "ceos1") {
+		t.Fatalf("expected node name in session bar, got %q", v)
+	}
+	if strings.Contains(v, "clab-srlinux-ceos-lab-ceos1") {
+		t.Fatalf("expected container name hidden, got %q", v)
 	}
 }
 
@@ -259,20 +301,23 @@ func TestSessionModelCursorRowBelowBars(t *testing.T) {
 	}
 }
 
-func TestSessionModelBarShowsLetterLabels(t *testing.T) {
+func TestSessionModelBarShowsPoolLabels(t *testing.T) {
 	prev := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.ANSI256)
 	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
 	sm, _, _ := newSession(t, "s1") // Title "r1"
 	sm.AddSession(&engine.SessionHandle{ID: "s2", Title: "srv2", NodeName: "srv2"})
 	sm.SetMode(SessionNormal)
-	// Red-highlighted letters r and v should appear (with ANSI color 196),
-	// and the old "1:r1" numeric prefix should be gone.
+	// The label letter uses the same bright red as the tab digits (196).
 	v := sm.View()
 	if strings.Contains(v, "1:r1") {
 		t.Fatalf("expected numeric prefix removed, got:\n%s", v)
 	}
-	if !strings.Contains(v, "\x1b[38;5;196m") {
-		t.Fatalf("expected red letter highlight in bar, got:\n%s", v)
+	plain := regexp.MustCompile(`\x1b\[[0-9;]*m`).ReplaceAllString(v, "")
+	if !strings.Contains(plain, "a r1") || !strings.Contains(plain, "b srv2") {
+		t.Fatalf("expected letters shown before names, got:\n%s", plain)
+	}
+	if !strings.Contains(v, "38;5;196") {
+		t.Fatalf("expected red label letter in bar, got:\n%s", v)
 	}
 }

@@ -12,6 +12,10 @@ import (
 	"github.com/tianyuxue/clab-tui/internal/engine"
 )
 
+// sessionLabelStyle colors the switch letter; it matches the bright red used
+// for the top tab digits.
+var sessionLabelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
+
 // SessionMode is the interaction mode of the sessions tab (vim-style).
 type SessionMode int
 
@@ -81,6 +85,9 @@ func (m *SessionModel) AddSession(h *engine.SessionHandle) {
 		term:   vt10x.New(vt10x.WithSize(m.width, m.height-1)),
 	})
 	m.active = len(m.sessions) - 1
+	// A newly opened session starts interactive: opening SSH means the user
+	// wants to type, regardless of the mode of a previously focused session.
+	m.mode = SessionInsert
 	if h.Resize != nil {
 		_ = h.Resize(m.width, m.height-1)
 	}
@@ -102,15 +109,42 @@ func (m *SessionModel) RemoveSession(id string) bool {
 	return false
 }
 
-// SessionLabels returns the letter label for each live session (normal mode
-// quick-switch). Letters are first-letter-deduped, skipping reserved keys.
-// 's' is reserved because normal mode uses it to open the session picker.
-func (m *SessionModel) SessionLabels() []string {
-	titles := make([]string, len(m.sessions))
-	for i, s := range m.sessions {
-		titles[i] = s.Handle.Title
+// CloseOtherLabs closes and removes every session that does not belong to
+// keepLab, returning how many were closed. Switching labs calls this so a
+// session can never outlive the lab it was opened against.
+func (m *SessionModel) CloseOtherLabs(keepLab string) int {
+	if len(m.sessions) == 0 {
+		return 0
 	}
-	return AssignLabelsExcluded(titles, 'j', 'k', 'q', 's')
+	closed := 0
+	kept := m.sessions[:0]
+	for _, s := range m.sessions {
+		if s.Handle.LabName != keepLab {
+			if s.Handle.Close != nil {
+				_ = s.Handle.Close()
+			}
+			closed++
+			continue
+		}
+		kept = append(kept, s)
+	}
+	m.sessions = kept
+	if m.active >= len(m.sessions) {
+		m.active = len(m.sessions) - 1
+	}
+	if m.active < 0 {
+		m.active = 0
+	}
+	return closed
+}
+
+// SessionLabels returns the switch label for each live session (normal mode
+// quick-switch). Labels come from a fixed pool in open order (a, b, c, ...),
+// skipping keys reserved by normal mode: j/k scroll, q close, s picker. This
+// avoids the collisions of name-derived labels when device names share a
+// prefix (sw1/sw2) or are short.
+func (m *SessionModel) SessionLabels() []string {
+	return AssignPoolLabels(len(m.sessions), 'j', 'k', 'q', 's')
 }
 
 // FocusSession makes the session with the given ID active (no-op if unknown).
@@ -244,29 +278,21 @@ func (m *SessionModel) View() string {
 
 	var bar strings.Builder
 	labels := m.SessionLabels()
-	// Match the tab bar: the active entry is bold pink with a red label
-	// letter; inactive entries are dim grey. Foreground-only so it reads the
-	// same as a selected tab (no background fill).
+	// Match the tab bar: the active entry is bold pink, inactive entries are
+	// dim grey (foreground-only, no background fill). The switch label is shown
+	// explicitly as "[a] name" because it is independent of the device name.
 	inactiveBase := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	activeBase := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
-	activeLabel := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196"))
 	for i, s := range m.sessions {
-		title := s.Handle.Title
-		label := ""
-		if i < len(labels) {
-			label = labels[i]
-		}
-		before, letter, after := splitLabel(title, label)
+		name := s.Handle.DisplayName()
 		var display string
-		switch {
-		case letter == "" && i == m.active:
-			display = activeBase.Render(title)
-		case letter == "":
-			display = inactiveBase.Render(title)
-		case i == m.active:
-			display = activeBase.Render(before) + activeLabel.Render(letter) + activeBase.Render(after)
-		default:
-			display = inactiveBase.Render(before) + keyLabelStyle.Render(letter) + inactiveBase.Render(after)
+		if i == m.active {
+			display = activeBase.Render(name)
+		} else {
+			display = inactiveBase.Render(name)
+		}
+		if i < len(labels) && labels[i] != "" {
+			display = sessionLabelStyle.Render(labels[i]) + " " + display
 		}
 		bar.WriteString(display + "  ")
 	}

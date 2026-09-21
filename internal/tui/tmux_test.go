@@ -87,6 +87,7 @@ func (f *fakeEngine) OpenSession(context.Context, string, string, engine.Session
 	h := *tmuxFixtureSession
 	h.ID = fmt.Sprintf("session-%s", map[bool]string{true: "two", false: "one"}[tmuxFixtureSessionCount > 1])
 	h.Title = fmt.Sprintf("spine%d", tmuxFixtureSessionCount)
+	h.NodeName = h.Title
 	h.Output = func() <-chan []byte {
 		ch := make(chan []byte, 1)
 		ch <- []byte(h.ID + "\r\n")
@@ -206,9 +207,9 @@ func TestTmuxBlackBox(t *testing.T) {
 		h.sendKeys(t, "Enter")
 		h.waitFor(t, "session-two", 2*time.Second)
 		h.sendKeys(t, "C-\\")
-		h.sendKeys(t, "p")
+		h.sendKeys(t, "a") // fixed-pool label for the first session
 		h.waitFor(t, "[NORMAL]", 2*time.Second)
-		h.sendKeys(t, "i")
+		h.sendKeys(t, "b") // fixed-pool label for the second session
 		h.waitFor(t, "session-two", 2*time.Second)
 		h.sendKeys(t, "q")
 		h.waitFor(t, "session-one", 2*time.Second)

@@ -10,6 +10,30 @@ Releases before the public launch are not published; see the
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-09-21
+
+### Added
+
+- Sessions tab: each session tab shows the device (node) name and a stable
+  switch label assigned in open order (`a`, `b`, `c`, ...), so sessions are
+  easy to tell apart and switch with one key.
+- Sessions tab: `esc esc` (double-tap) switches to normal mode, with a status
+  bar prompt after the first `esc`; `ctrl+\` remains available as a fallback.
+- Switching labs now closes the sessions of the previous lab, so a session
+  never outlives its lab.
+
+### Changed
+
+- Opening a session always starts in insert mode; switching to an existing
+  session keeps the current mode, so navigation stays in normal mode.
+- Session switch labels now come from a fixed letter pool instead of being
+  derived from the device name, removing collisions for names like `sw1`/`sw2`.
+
+### Fixed
+
+- Sessions tab: session tabs no longer show the long container name.
+- Sessions tab: the switch label uses the same red as the top tab digits.
+
 ## [0.1.2] - 2026-09-20
 
 ### Added

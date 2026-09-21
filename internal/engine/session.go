@@ -19,6 +19,16 @@ type SessionHandle struct {
 	Close    func() error
 }
 
+// DisplayName returns the human-facing label for the session. It prefers the
+// logical node name (the name shown on the topology) and falls back to Title
+// (the engine container name) when NodeName is unset.
+func (h *SessionHandle) DisplayName() string {
+	if h.NodeName != "" {
+		return h.NodeName
+	}
+	return h.Title
+}
+
 // SessionManager manages multiple live interactive sessions (multi-tab). Each
 // session is an independent PTY; sessions keep running in the background and
 // their output is buffered.

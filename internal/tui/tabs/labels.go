@@ -37,6 +37,27 @@ func AssignLabelsExcluded(items []string, excluded ...rune) []string {
 	return labels
 }
 
+// AssignPoolLabels assigns labels from a fixed alphabetical pool, in order,
+// skipping excluded letters. Unlike AssignLabels it never derives labels from
+// the item text, so short or identically-prefixed names (e.g. sw1/sw2) cannot
+// collide. Items past the end of the pool get an empty label.
+func AssignPoolLabels(n int, excluded ...rune) []string {
+	skip := map[rune]bool{}
+	for _, r := range excluded {
+		skip[unicode.ToLower(r)] = true
+	}
+	labels := make([]string, n)
+	next := 0
+	for r := 'a'; r <= 'z' && next < n; r++ {
+		if skip[r] {
+			continue
+		}
+		labels[next] = string(r)
+		next++
+	}
+	return labels
+}
+
 // LabelIndex returns the index of the item whose label equals r (case-insensitive).
 func LabelIndex(r rune, labels []string) (int, bool) {
 	lower := unicode.ToLower(r)

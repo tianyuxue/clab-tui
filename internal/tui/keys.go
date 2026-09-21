@@ -25,6 +25,7 @@ var spaceMenu = key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "men
 // a live session is in insert mode, where every key is shell input.
 func SessionInsertHelp() []key.Binding {
 	return []key.Binding{
+		key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc esc", "(double-tap) to normal")),
 		key.NewBinding(key.WithKeys("ctrl+\\"), key.WithHelp("ctrl+\\", "to normal")),
 	}
 }

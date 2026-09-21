@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -374,6 +375,25 @@ func TestLabMenuRedeployCallsEngine(t *testing.T) {
 	}
 	if f.redeployName != "lab1" {
 		t.Fatalf("expected Redeploy name lab1, got %q", f.redeployName)
+	}
+}
+
+func TestLabSwitchClosesPreviousLabSessions(t *testing.T) {
+	labA := &engine.Lab{Name: "labA"}
+	labB := &engine.Lab{Name: "labB"}
+	f := newFakeEngine()
+	f.lab = labB
+	m := New(f, []*engine.Lab{labA, labB})
+	m.labPicker = tabs.NewLabPicker()
+	m.devTree = tabs.NewDevTree()
+	m.sessionModel.AddSession(&engine.SessionHandle{ID: "s1", LabName: "labA", Title: "sw1", NodeName: "sw1"})
+	m.sessionModel.AddSession(&engine.SessionHandle{ID: "s2", LabName: "labB", Title: "sw2", NodeName: "sw2"})
+
+	result, _ := m.Update(tabs.LabPickedMsg{Lab: labB})
+	m = result.(*Model)
+	sessions := m.sessionModel.Sessions()
+	if len(sessions) != 1 || sessions[0].Handle.ID != "s2" {
+		t.Fatalf("expected only the labB session to survive, got %+v", sessions)
 	}
 }
 
@@ -1408,6 +1428,95 @@ func TestCtrlBackslashSingleEntersNormal(t *testing.T) {
 	}
 }
 
+func TestEscEscEntersNormal(t *testing.T) {
+	m := New(nil, nil)
+	m.activeTab = tabSessions
+	stdin := &sessionTestStdin{Buffer: &bytes.Buffer{}}
+	m.sessionModel.AddSession(&engine.SessionHandle{ID: "s1", Title: "r1", NodeName: "r1", Stdin: stdin})
+
+	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.sessionModel.Mode() != tabs.SessionInsert {
+		t.Fatal("single esc must not leave insert mode")
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.sessionModel.Mode() != tabs.SessionNormal {
+		t.Fatal("double esc must enter normal mode")
+	}
+	// A double tap must not send any Esc to the shell.
+	if got := stdin.String(); got != "" {
+		t.Fatalf("expected no esc forwarded on double tap, got %q", got)
+	}
+}
+
+func TestEscFlushedAfterWindow(t *testing.T) {
+	m := New(nil, nil)
+	m.activeTab = tabSessions
+	stdin := &sessionTestStdin{Buffer: &bytes.Buffer{}}
+	m.sessionModel.AddSession(&engine.SessionHandle{ID: "s1", Title: "r1", NodeName: "r1", Stdin: stdin})
+
+	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if got := stdin.String(); got != "" {
+		t.Fatalf("esc must be held during the window, got %q", got)
+	}
+	// Window elapses with no second Esc: the lone Esc reaches the shell.
+	m.lastEsc = time.Now().Add(-2 * escDoubleWindow)
+	m.Update(escWindowElapsedMsg{})
+	if got := stdin.String(); got != "\x1b" {
+		t.Fatalf("expected held esc flushed to shell, got %q", got)
+	}
+	if m.sessionModel.Mode() != tabs.SessionInsert {
+		t.Fatal("window elapse must not change mode")
+	}
+}
+
+func TestEscEscResetsOnOtherKey(t *testing.T) {
+	m := New(nil, nil)
+	m.activeTab = tabSessions
+	stdin := &sessionTestStdin{Buffer: &bytes.Buffer{}}
+	m.sessionModel.AddSession(&engine.SessionHandle{ID: "s1", Title: "r1", NodeName: "r1", Stdin: stdin})
+
+	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.sessionModel.Mode() != tabs.SessionInsert {
+		t.Fatal("esc after another key must not enter normal mode")
+	}
+}
+
+func TestEscPendingHintShownAfterFirstEsc(t *testing.T) {
+	m := New(nil, nil)
+	m.activeTab = tabSessions
+	stdin := &sessionTestStdin{Buffer: &bytes.Buffer{}}
+	m.sessionModel.AddSession(&engine.SessionHandle{ID: "s1", Title: "r1", NodeName: "r1", Stdin: stdin})
+
+	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if text, _ := m.statusRight(); !strings.Contains(text, "esc again") {
+		t.Fatalf("expected esc-again prompt after first esc, got %q", text)
+	}
+	// Once the double-tap window elapses the prompt clears.
+	m.lastEsc = time.Now().Add(-2 * escDoubleWindow)
+	if text, _ := m.statusRight(); strings.Contains(text, "esc again") {
+		t.Fatalf("expected prompt cleared after window, got %q", text)
+	}
+}
+
+func TestEscAfterWindowDoesNotSwitch(t *testing.T) {
+	m := New(nil, nil)
+	m.activeTab = tabSessions
+	stdin := &sessionTestStdin{Buffer: &bytes.Buffer{}}
+	m.sessionModel.AddSession(&engine.SessionHandle{ID: "s1", Title: "r1", NodeName: "r1", Stdin: stdin})
+
+	// A previous Esc that already aged out must not combine with a new one.
+	m.lastEsc = time.Now().Add(-time.Second)
+	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.sessionModel.Mode() != tabs.SessionInsert {
+		t.Fatal("slow second esc must not enter normal mode")
+	}
+	if got := stdin.String(); got != "\x1b" {
+		t.Fatalf("expected the esc forwarded to the shell, got %q", got)
+	}
+}
+
 func TestSessionPickerShownOnS(t *testing.T) {
 	m := New(nil, nil)
 	m.activeTab = tabSessions
@@ -1524,15 +1633,15 @@ func TestSessionInsertModeDigitGoesToShell(t *testing.T) {
 	}
 }
 
-func TestSessionPickedMsgEntersInsertMode(t *testing.T) {
+func TestSessionPickedMsgPreservesMode(t *testing.T) {
 	m := New(nil, nil)
 	m.activeTab = tabSessions
 	m.sessionModel.AddSession(&engine.SessionHandle{ID: "s1", Title: "r1", NodeName: "r1"})
 	m.sessionModel.SetMode(tabs.SessionNormal)
 
 	m.Update(tabs.SessionPickedMsg{Session: &engine.SessionHandle{ID: "s1", Title: "r1", NodeName: "r1"}})
-	if m.sessionModel.Mode() != tabs.SessionInsert {
-		t.Fatal("expected insert mode after SessionPickedMsg")
+	if m.sessionModel.Mode() != tabs.SessionNormal {
+		t.Fatal("expected mode preserved after SessionPickedMsg")
 	}
 }
 

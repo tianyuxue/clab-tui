@@ -15,6 +15,19 @@ func TestSessionManagerInterface(t *testing.T) {
 	var _ SessionManager = (*fakeSessionManager)(nil)
 }
 
+func TestSessionHandleDisplayName(t *testing.T) {
+	// Prefer the logical node name (shown on the topology).
+	h := &SessionHandle{Title: "clab-lab-ceos1", NodeName: "ceos1"}
+	if got := h.DisplayName(); got != "ceos1" {
+		t.Fatalf("DisplayName = %q, want ceos1", got)
+	}
+	// Fall back to the container title when NodeName is unset.
+	h2 := &SessionHandle{Title: "clab-lab-ceos1"}
+	if got := h2.DisplayName(); got != "clab-lab-ceos1" {
+		t.Fatalf("DisplayName = %q, want container title fallback", got)
+	}
+}
+
 // Output is a raw byte stream (not line-parsed) so the UI can feed a terminal
 // emulator directly.
 func TestSessionHandleOutputIsRawBytes(t *testing.T) {

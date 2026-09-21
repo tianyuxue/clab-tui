@@ -19,7 +19,7 @@ type SessionPicker struct {
 
 func NewSessionPicker() *SessionPicker {
 	return &SessionPicker{
-		sl: newSelectList("Sessions", func(s *engine.SessionHandle) string { return s.Title },
+		sl: newSelectList("Sessions", func(s *engine.SessionHandle) string { return s.DisplayName() },
 			func(s *engine.SessionHandle) tea.Msg { return SessionPickedMsg{Session: s} }),
 	}
 }

@@ -40,6 +40,32 @@ var presetTraceFilters = []tabs.ActionItem{
 	{Label: "Custom...", ID: "custom-filter"},
 }
 
+// escDoubleWindow is how quickly a second Esc must follow the first for the
+// sessions tab to switch from insert to normal mode.
+const escDoubleWindow = 250 * time.Millisecond
+
+// escWindowElapsedMsg clears the pending double-Esc prompt after the window.
+type escWindowElapsedMsg struct{}
+
+// escWindowTick schedules escWindowElapsedMsg after escDoubleWindow.
+func escWindowTick() tea.Cmd {
+	return tea.Tick(escDoubleWindow, func(time.Time) tea.Msg { return escWindowElapsedMsg{} })
+}
+
+// flushPendingEscToShell delivers a held single Esc to the session shell. The
+// sessions tab holds the first Esc for escDoubleWindow so a double tap can
+// switch modes without also sending Esc to the program; this releases the lone
+// Esc when the window ends (or another key interrupts the sequence).
+func (m *Model) flushPendingEscToShell() {
+	if m.lastEsc.IsZero() {
+		return
+	}
+	m.lastEsc = time.Time{}
+	if m.activeTab == tabSessions && m.sessionModel.HasSessions() && m.sessionModel.IsInsert() {
+		m.sessionModel, _ = m.sessionModel.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	}
+}
+
 // Option configures a Model at construction time.
 type Option func(*Model)
 
@@ -72,6 +98,7 @@ type Model struct {
 	netemIface         string
 	sessionModel       *tabs.SessionModel
 	sessionPicker      *tabs.SessionPicker
+	lastEsc            time.Time // for double-Esc mode switch in sessions insert
 	whichKey           *tabs.WhichKey
 	changeCh           <-chan engine.Change
 	changeCancel       func()
@@ -242,16 +269,36 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// shortcuts.
 		if m.activeTab == tabSessions && m.sessionModel.HasSessions() {
 			if m.sessionModel.IsInsert() {
-				// Mode switch: single ctrl+\ enters normal mode.
-				if msg.String() == "ctrl+\\" {
+				switch msg.String() {
+				case "ctrl+\\":
+					// Single-key mode switch (kept as a reliable fallback).
+					m.flushPendingEscToShell()
 					m.sessionModel.SetMode(tabs.SessionNormal)
 					return m, nil
+				case "esc":
+					if !m.lastEsc.IsZero() && time.Since(m.lastEsc) <= escDoubleWindow {
+						// Second Esc completes the double tap: switch modes and
+						// send nothing to the shell.
+						m.lastEsc = time.Time{}
+						m.sessionModel.SetMode(tabs.SessionNormal)
+						return m, nil
+					}
+					// Hold the first Esc for the double-tap window. It is
+					// delivered to the shell only if no second Esc arrives, so
+					// "switch mode" and "send Esc to shell" never both happen.
+					m.flushPendingEscToShell()
+					m.lastEsc = time.Now()
+					return m, escWindowTick()
+				default:
+					// Any other key ends the double-Esc window: release a held
+					// single Esc to the shell before forwarding this key.
+					m.flushPendingEscToShell()
+					// Insert mode: every key (incl ctrl+c, tab, arrows, 's') is
+					// shell input via the session model's KeyEncode.
+					var smCmd tea.Cmd
+					m.sessionModel, smCmd = m.sessionModel.Update(msg)
+					return m, smCmd
 				}
-				// Insert mode: every key (incl ctrl+c, tab, arrows, 's') is
-				// shell input via the session model's KeyEncode.
-				var smCmd tea.Cmd
-				m.sessionModel, smCmd = m.sessionModel.Update(msg)
-				return m, smCmd
 			}
 			// Normal mode: tab/shift+tab switch tabs; 's' opens the session
 			// picker; everything else goes to the session model.
@@ -320,9 +367,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tabs.LabPickedMsg:
 		// Lab picked from the overlay: switch to topology and load it.
+		// Switching lab force-closes sessions from the previous lab so a
+		// session can never outlive (or be confused with) its lab.
+		closed := m.sessionModel.CloseOtherLabs(msg.Lab.Name)
 		m.activeTab = tabTopology
 		m.curTopoLab = msg.Lab.Name
-		return m, loadTopology(m.eng, msg.Lab.Name)
+		cmd := loadTopology(m.eng, msg.Lab.Name)
+		if closed > 0 {
+			return m, tea.Batch(cmd,
+				m.toast.Show(fmt.Sprintf("closed %d session(s) from previous lab", closed)))
+		}
+		return m, cmd
 
 	case tabs.ActionSelectedMsg:
 		// An action was picked from the node or lab action menu.
@@ -589,6 +644,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 
+	case escWindowElapsedMsg:
+		// No second Esc arrived: release the held single Esc to the shell.
+		if !m.lastEsc.IsZero() && time.Since(m.lastEsc) >= escDoubleWindow {
+			m.flushPendingEscToShell()
+		}
+		return m, nil
+
 	case sessionOutputMsg:
 		m.sessionModel.Feed(msg.ID, msg.Data)
 		for _, s := range m.sessionModel.Sessions() {
@@ -604,9 +666,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tabs.SessionPickedMsg:
+		// Switching is navigation, so the current mode is preserved (unlike a
+		// new session, which starts interactive).
 		if msg.Session != nil {
 			m.sessionModel.FocusSession(msg.Session.ID)
-			m.sessionModel.SetMode(tabs.SessionInsert)
 		}
 		return m, nil
 
@@ -1517,6 +1580,10 @@ func (m *Model) statusRight() (string, lipgloss.Color) {
 	}
 	if m.err != nil {
 		return "ERROR: " + m.err.Error(), lipgloss.Color("196")
+	}
+	if m.activeTab == tabSessions && m.sessionModel.IsInsert() &&
+		!m.lastEsc.IsZero() && time.Since(m.lastEsc) <= escDoubleWindow {
+		return "esc again → normal", lipgloss.Color("214")
 	}
 	if m.tracing {
 		return "● TRACING", lipgloss.Color("42")

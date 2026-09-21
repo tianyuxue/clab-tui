@@ -99,6 +99,27 @@ func TestAssignLabelsWrapperMatchesOriginal(t *testing.T) {
 	}
 }
 
+func TestAssignPoolLabelsSkipsReserved(t *testing.T) {
+	labels := AssignPoolLabels(5, 'j', 'k', 'q', 's')
+	want := []string{"a", "b", "c", "d", "e"}
+	for i := range want {
+		if labels[i] != want[i] {
+			t.Fatalf("labels[%d]=%q, want %q", i, labels[i], want[i])
+		}
+	}
+}
+
+func TestAssignPoolLabelsExhausted(t *testing.T) {
+	// 26 letters minus 4 excluded = 22 usable labels (indices 0..21).
+	labels := AssignPoolLabels(25, 'j', 'k', 'q', 's')
+	if labels[21] == "" {
+		t.Fatal("expected a label at the last pool position")
+	}
+	if labels[22] != "" {
+		t.Fatalf("expected empty label past the pool, got %q", labels[22])
+	}
+}
+
 func TestPaginate(t *testing.T) {
 	items := make([]string, 12)
 	for i := range items {
