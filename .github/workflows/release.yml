@@ -1,8 +1,8 @@
 name: Release
 
-# Release checklist: the install examples pin a concrete version. Before
-# pushing a new tag, update VERSION= in:
-#   README.md, README.zh-CN.md, docs/getting-started.md, docs/zh-CN/getting-started.md
+# Artifacts use stable, version-free names so the install docs can link to
+# releases/latest/download and never need a per-release version bump. The
+# version is still available via `clab-tui --version` and the release tag.
 on:
   push:
     tags:
@@ -49,8 +49,7 @@ jobs:
       - name: Package
         run: |
           set -eu
-          ver="${GITHUB_REF_NAME}"
-          name="clab-tui_${ver}_linux_amd64"
+          name="clab-tui_linux_amd64"
           mkdir -p "dist/${name}"
           cp clab-tui README.md README.zh-CN.md LICENSE "dist/${name}/"
           tar -C dist -czf "dist/${name}.tar.gz" "${name}"
@@ -61,5 +60,5 @@ jobs:
         with:
           generate_release_notes: true
           files: |
-            dist/clab-tui_*_linux_amd64.tar.gz
+            dist/clab-tui_linux_amd64.tar.gz
             dist/checksums.txt

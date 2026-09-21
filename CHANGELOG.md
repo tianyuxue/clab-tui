@@ -10,6 +10,15 @@ Releases before the public launch are not published; see the
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-09-21
+
+### Changed
+
+- Release artifacts now use stable, version-free names
+  (`clab-tui_linux_amd64.tar.gz` and `checksums.txt`), and the install
+  documentation links to `releases/latest/download` so it always installs the
+  newest release without a per-release version bump.
+
 ## [0.1.3] - 2026-09-21
 
 ### Added

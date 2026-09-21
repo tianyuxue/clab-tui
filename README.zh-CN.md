@@ -48,12 +48,11 @@ clab-tui **不** 内置 containerlab。请先安装以下内容：
 校验后将二进制文件放入 `PATH`：
 
 ```bash
-VERSION=v0.1.3
-curl -fsSLO "https://github.com/tianyuxue/clab-tui/releases/download/${VERSION}/clab-tui_${VERSION}_linux_amd64.tar.gz"
-curl -fsSLO "https://github.com/tianyuxue/clab-tui/releases/download/${VERSION}/checksums.txt"
+curl -fsSLO "https://github.com/tianyuxue/clab-tui/releases/latest/download/clab-tui_linux_amd64.tar.gz"
+curl -fsSLO "https://github.com/tianyuxue/clab-tui/releases/latest/download/checksums.txt"
 sha256sum -c checksums.txt
-tar -xzf "clab-tui_${VERSION}_linux_amd64.tar.gz"
-sudo install -m 0755 "clab-tui_${VERSION}_linux_amd64/clab-tui" /usr/local/bin/clab-tui
+tar -xzf "clab-tui_linux_amd64.tar.gz"
+sudo install -m 0755 "clab-tui_linux_amd64/clab-tui" /usr/local/bin/clab-tui
 ```
 
 ### 从源码构建
