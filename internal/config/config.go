@@ -36,7 +36,7 @@ func Load() (*Config, error) {
 		}
 		return nil, err
 	}
-	var cfg Config
+	cfg := Default()
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}

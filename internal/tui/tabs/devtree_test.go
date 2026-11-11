@@ -120,23 +120,77 @@ func TestDevTreeLongFooterStaysSingleLine(t *testing.T) {
 	}
 }
 
-func TestDevTreeCtrlFAndCtrlBPageViewport(t *testing.T) {
+func scrollTestTree(t *testing.T, nodeCount, height int) *DevTree {
+	t.Helper()
 	d := NewDevTree()
-	d.SetSize(40, 3)
-	nodes := make([]engine.Node, 12)
+	d.SetSize(40, height)
+	nodes := make([]engine.Node, nodeCount)
 	for i := range nodes {
 		nodes[i] = engine.Node{Name: fmt.Sprintf("node-%02d", i)}
 	}
 	d.SetTopology(&engine.Lab{Nodes: nodes})
 	d.View()
+	return d
+}
+
+func TestDevTreeCtrlFAndCtrlBPageViewport(t *testing.T) {
+	d := scrollTestTree(t, 12, 3)
 	d.Update(tea.KeyMsg{Type: tea.KeyCtrlF})
+	d.View()
 	if d.vp.YOffset == 0 {
 		t.Fatal("expected ctrl+f to page down")
 	}
+	if got := d.Selected().Name; got != "node-03" {
+		t.Fatalf("cursor after ctrl+f = %q, want node-03", got)
+	}
 	before := d.vp.YOffset
 	d.Update(tea.KeyMsg{Type: tea.KeyCtrlB})
+	d.View()
 	if d.vp.YOffset >= before {
 		t.Fatal("expected ctrl+b to page up")
+	}
+	if got := d.Selected().Name; got != "node-00" {
+		t.Fatalf("cursor after ctrl+b = %q, want node-00", got)
+	}
+}
+
+func TestDevTreeJAtTopDoesNotScroll(t *testing.T) {
+	d := scrollTestTree(t, 12, 3)
+	d.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	d.View()
+	if d.vp.YOffset != 0 {
+		t.Fatalf("j at top scrolled viewport to %d, want 0", d.vp.YOffset)
+	}
+	if got := d.Selected().Name; got != "node-01" {
+		t.Fatalf("cursor after j = %q, want node-01", got)
+	}
+}
+
+func TestDevTreeJScrollsOnlyAtBottomEdge(t *testing.T) {
+	d := scrollTestTree(t, 12, 3)
+	// Visible lines are the role header, node-00, node-01. Moving to node-01
+	// stays inside the viewport; moving to node-02 crosses the bottom edge.
+	d.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	d.View()
+	if d.vp.YOffset != 0 {
+		t.Fatalf("first j scrolled viewport to %d, want 0", d.vp.YOffset)
+	}
+	d.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	d.View()
+	if d.vp.YOffset != 1 {
+		t.Fatalf("second j scrolled viewport to %d, want 1", d.vp.YOffset)
+	}
+}
+
+func TestDevTreeKAtTopDoesNotScroll(t *testing.T) {
+	d := scrollTestTree(t, 12, 3)
+	d.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	d.View()
+	if d.vp.YOffset != 0 {
+		t.Fatalf("k at top scrolled viewport to %d, want 0", d.vp.YOffset)
+	}
+	if got := d.Selected().Name; got != "node-00" {
+		t.Fatalf("cursor after k = %q, want node-00", got)
 	}
 }
 

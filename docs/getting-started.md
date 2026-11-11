@@ -57,9 +57,13 @@ containerlab:
   bin_path: ""    # path to the containerlab binary; empty = resolve from PATH
   timeout: 300    # reserved
 theme: default     # reserved
+topology:
+  auto_refresh: true   # refresh business-interface IPs every 30s (fast kinds only)
 ```
 
-Only `containerlab.bin_path` is currently honored.
+`containerlab.bin_path` and `topology.auto_refresh` are honored. The which-key
+toggle changes `auto_refresh` for the current session only; set it to `false`
+here to start with it off.
 
 ## Run
 

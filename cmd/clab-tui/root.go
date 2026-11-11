@@ -109,12 +109,16 @@ func runTUI(opts runOptions) error {
 	binPath = resolveContainerlabBin(binPath)
 	eng := clabengine.NewWithFallback(binPath, opts.labDir)
 	caps := capability.Detect(binPath)
+	autoRefresh := true
+	if cfg != nil {
+		autoRefresh = cfg.Topology.AutoRefresh
+	}
 
 	var model *tui.Model
 	if opts.initialLab != nil {
-		model = tui.New(eng, labs, tui.WithInitialLab(opts.initialLab), tui.WithCapabilities(caps))
+		model = tui.New(eng, labs, tui.WithInitialLab(opts.initialLab), tui.WithCapabilities(caps), tui.WithAutoRefresh(autoRefresh))
 	} else {
-		model = tui.New(eng, labs, tui.WithCapabilities(caps))
+		model = tui.New(eng, labs, tui.WithCapabilities(caps), tui.WithAutoRefresh(autoRefresh))
 	}
 
 	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())

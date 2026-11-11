@@ -13,6 +13,36 @@ func TestDefault(t *testing.T) {
 	if c.Containerlab.Timeout != 300 {
 		t.Fatalf("expected default timeout 300, got %d", c.Containerlab.Timeout)
 	}
+	if !c.Topology.AutoRefresh {
+		t.Fatal("expected topology.auto_refresh to default to true")
+	}
+}
+
+func TestLoadTopologyAutoRefreshFalse(t *testing.T) {
+	oldXDG := os.Getenv("XDG_CONFIG_HOME")
+	os.Setenv("XDG_CONFIG_HOME", "/tmp/clab-tui-test-auto-refresh")
+	defer func() {
+		if oldXDG != "" {
+			os.Setenv("XDG_CONFIG_HOME", oldXDG)
+		} else {
+			os.Unsetenv("XDG_CONFIG_HOME")
+		}
+		os.RemoveAll("/tmp/clab-tui-test-auto-refresh")
+	}()
+	path, err := Path()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("topology:\n  auto_refresh: false\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Topology.AutoRefresh {
+		t.Fatal("expected topology.auto_refresh false from config")
+	}
 }
 
 func TestPath(t *testing.T) {

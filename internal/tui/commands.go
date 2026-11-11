@@ -34,7 +34,14 @@ type labsLoadedMsg struct {
 }
 
 type topologyLoadedMsg struct {
-	lab *engine.Lab
+	lab    *engine.Lab
+	reload bool
+}
+
+// clearNoMatchMsg fires after a no-match search timeout. The sequence guards
+// against an older timer clearing a newer search.
+type clearNoMatchMsg struct {
+	seq int
 }
 
 type opLineMsg struct {
@@ -73,9 +80,23 @@ type monitorTickMsg struct{ node string }
 
 // interfaceIPMsg carries one node's interface IPv4 map (or its fetch error).
 type interfaceIPMsg struct {
+	lab  string
+	gen  int
 	node string
 	ips  map[string]string
 	err  error
+}
+
+// interfaceIPsBatchMsg carries the result of a background full-IP refresh.
+type interfaceIPsBatchMsg struct {
+	lab string
+	gen int
+	ips map[string]map[string]string
+}
+
+// ipRefreshTickMsg fires every ipRefreshInterval while auto refresh is on.
+type ipRefreshTickMsg struct {
+	seq int
 }
 
 type interfaceStatsMsg struct {
@@ -184,7 +205,7 @@ func runOperation(ch <-chan engine.OutputLine) tea.Cmd {
 }
 
 // loadTopology fetches a lab (static topology + live state merged) by name.
-func loadTopology(eng engine.Engine, labName string) tea.Cmd {
+func loadTopology(eng engine.Engine, labName string, reload bool) tea.Cmd {
 	return func() tea.Msg {
 		if eng == nil {
 			return nil
@@ -193,6 +214,6 @@ func loadTopology(eng engine.Engine, labName string) tea.Cmd {
 		if err != nil {
 			return errMsg{err}
 		}
-		return topologyLoadedMsg{lab: lab}
+		return topologyLoadedMsg{lab: lab, reload: reload}
 	}
 }

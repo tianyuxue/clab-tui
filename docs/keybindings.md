@@ -41,6 +41,9 @@ The menu is modal: press the highlighted letter to choose, `j`/`k` to move, `Ent
 confirm a group or action, and `Esc`/`q` to go back.
 
 - **Topology → Lab**: Switch Lab, Deploy, Destroy, Redeploy, Edit YAML, View Graph.
+- **Topology → Refresh**: Refresh Now, Auto Refresh on/off. The status bar shows
+  `↻ 30s` when auto refresh is on, `↻ off` when it is off, `↻ …` while a
+  business-IP refresh is running, `●` for tracing, and `⚠` for limited mode.
 - **Topology → Node**: SSH, Start, Stop, Restart, Pause, Unpause, View Logs.
 - **Topology**: Trace, Filter, Search.
 - **Sessions**: Switch Session.

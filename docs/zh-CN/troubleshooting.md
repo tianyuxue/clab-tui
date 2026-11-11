@@ -53,8 +53,8 @@ clab-tui 会以 toast 形式打印图 URL，并使用 `xdg-open` 打开它。在
 ## 配置文件被忽略
 
 配置文件位于 `$XDG_CONFIG_HOME/clab-tui/config.yaml`，当 `XDG_CONFIG_HOME` 未设置时为
-`~/.config/clab-tui/config.yaml`。解析错误会打印到 stderr，并使用默认值。目前只有
-`containerlab.bin_path` 会生效；`timeout` 和 `theme` 为保留项。
+`~/.config/clab-tui/config.yaml`。解析错误会打印到 stderr，并使用默认值。
+`containerlab.bin_path` 和 `topology.auto_refresh` 会生效；`timeout` 和 `theme` 为保留项。
 
 ## Edit YAML 打开了错误的编辑器
 

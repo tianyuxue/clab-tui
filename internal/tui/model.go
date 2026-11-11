@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/bubbles/help"
@@ -44,6 +45,13 @@ var presetTraceFilters = []tabs.ActionItem{
 // sessions tab to switch from insert to normal mode.
 const escDoubleWindow = 250 * time.Millisecond
 
+// ipRefreshInterval is the background business-IP refresh period.
+const ipRefreshInterval = 30 * time.Second
+
+// searchNoMatchTTL is how long a "no matches" footer stays before the search
+// is cleared.
+const searchNoMatchTTL = 3 * time.Second
+
 // escWindowElapsedMsg clears the pending double-Esc prompt after the window.
 type escWindowElapsedMsg struct{}
 
@@ -80,6 +88,7 @@ type Model struct {
 	ready              bool
 	err                error
 	errSeq             int
+	searchSeq          int
 	labs               []*engine.Lab
 	startupPickerShown bool
 	devTree            *tabs.DevTree
@@ -124,6 +133,13 @@ type Model struct {
 	tracing            bool
 	pendingFilter      bool
 	graph              graphLauncher
+
+	topologyGen     int
+	pendingReload   bool
+	ipAutoRefresh   bool
+	ipTickerRunning bool
+	ipTickerSeq     int
+	ipRefreshing    bool
 }
 
 func New(eng engine.Engine, labs []*engine.Lab, opts ...Option) *Model {
@@ -146,6 +162,7 @@ func New(eng engine.Engine, labs []*engine.Lab, opts ...Option) *Model {
 		sessionPicker: tabs.NewSessionPicker(),
 		whichKey:      tabs.NewWhichKey(),
 		capturePane:   tabs.NewCapturePane(),
+		ipAutoRefresh: true,
 	}
 	if labs != nil {
 		m.labs = labs
@@ -176,6 +193,12 @@ func WithInitialLab(lab *engine.Lab) Option {
 // checks and degraded-mode notices.
 func WithCapabilities(caps capability.Capabilities) Option {
 	return func(m *Model) { m.caps = caps }
+}
+
+// WithAutoRefresh sets the initial state of the topology business-IP auto
+// refresh. The which-key toggle changes it for the current session only.
+func WithAutoRefresh(enabled bool) Option {
+	return func(m *Model) { m.ipAutoRefresh = enabled }
 }
 
 // requireCap shows an English toast and returns its command when req is
@@ -372,7 +395,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		closed := m.sessionModel.CloseOtherLabs(msg.Lab.Name)
 		m.activeTab = tabTopology
 		m.curTopoLab = msg.Lab.Name
-		cmd := loadTopology(m.eng, msg.Lab.Name)
+		cmd := loadTopology(m.eng, msg.Lab.Name, true)
 		if closed > 0 {
 			return m, tea.Batch(cmd,
 				m.toast.Show(fmt.Sprintf("closed %d session(s) from previous lab", closed)))
@@ -441,6 +464,26 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.editCurrentLabYAML()
 		case "graph":
 			return m, m.openGraphView()
+		case "refresh-ips":
+			if m.ipRefreshing {
+				return m, m.toast.Show("IP refresh already running")
+			}
+			lab := m.currentLab()
+			if lab == nil {
+				return m, m.toast.Show("no lab selected")
+			}
+			if cmd := m.startFullIPRefresh(lab); cmd != nil {
+				return m, cmd
+			}
+			return m, m.toast.Show("no fast-IP nodes in this lab")
+		case "toggle-ip-autorefresh":
+			m.ipAutoRefresh = !m.ipAutoRefresh
+			if !m.ipAutoRefresh {
+				m.ipTickerRunning = false
+				m.ipTickerSeq++
+				return m, nil
+			}
+			return m, m.ensureIPTicker()
 		case "trace":
 			return m, m.toggleTrace()
 		case "filter":
@@ -505,8 +548,22 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.startCaptureFile(m.curTopoLab, m.captureNode, m.captureIface, m.captureFilter, path)
 		}
 		// Search committed from the prompt: locate matches in the device tree.
+		m.searchSeq++
+		seq := m.searchSeq
 		m.devTree.Search(msg.Term)
-		return m, m.refreshDetail(m.detailNodeName())
+		detailCmd := m.refreshDetail(m.detailNodeName())
+		if !m.devTree.NoMatch() {
+			return m, detailCmd
+		}
+		return m, tea.Batch(detailCmd, tea.Tick(searchNoMatchTTL, func(time.Time) tea.Msg {
+			return clearNoMatchMsg{seq: seq}
+		}))
+
+	case clearNoMatchMsg:
+		if msg.seq == m.searchSeq && m.devTree.NoMatch() {
+			m.devTree.ClearSearch()
+		}
+		return m, nil
 
 	case tabs.NetemCommitMsg:
 		return m, m.setNetem(msg.State)
@@ -588,7 +645,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.startupPickerShown = true
 			m.activeTab = tabTopology
 			m.curTopoLab = init.Name
-			return m, loadTopology(m.eng, m.curTopoLab)
+			return m, loadTopology(m.eng, m.curTopoLab, true)
 		}
 		if !m.startupPickerShown {
 			m.startupPickerShown = true
@@ -596,11 +653,26 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.maybeLoadTopology()
 	case topologyLoadedMsg:
-		if msg.lab != nil {
-			m.curTopoLab = msg.lab.Name
-			m.devTree.SetTopology(msg.lab)
+		if msg.lab == nil {
+			return m, nil
 		}
-		return m, m.refreshDetail(m.detailNodeName())
+		m.curTopoLab = msg.lab.Name
+		if msg.reload {
+			m.topologyGen++
+			m.ipRefreshing = false
+			m.devTree.ClearInterfaceIPs()
+		}
+		m.devTree.SetTopology(msg.lab)
+		cmds := []tea.Cmd{m.refreshDetail(m.detailNodeName())}
+		if msg.reload {
+			if cmd := m.startFullIPRefresh(msg.lab); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			if cmd := m.ensureIPTicker(); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
+		return m, tea.Batch(cmds...)
 
 	case monitorMsg:
 		if msg.node == m.detailNodeName() {
@@ -609,10 +681,37 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case interfaceIPMsg:
-		if msg.node == m.detailNodeName() {
+		if msg.lab == m.curTopoLab && msg.gen == m.topologyGen {
 			m.devTree.SetInterfaceIPs(msg.node, msg.ips)
 		}
 		return m, nil
+
+	case interfaceIPsBatchMsg:
+		if msg.lab == m.curTopoLab && msg.gen == m.topologyGen {
+			for node, ips := range msg.ips {
+				m.devTree.SetInterfaceIPs(node, ips)
+			}
+		}
+		if msg.gen == m.topologyGen {
+			m.ipRefreshing = false
+		}
+		return m, nil
+
+	case ipRefreshTickMsg:
+		if msg.seq != m.ipTickerSeq {
+			return m, nil
+		}
+		m.ipTickerRunning = false
+		if !m.ipAutoRefresh {
+			return m, nil
+		}
+		cmds := []tea.Cmd{m.ensureIPTicker()}
+		if m.activeTab == tabTopology && !m.ipRefreshing {
+			if cmd := m.startFullIPRefresh(m.currentLab()); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
+		return m, tea.Batch(cmds...)
 
 	case interfaceStatsMsg:
 		if msg.node == m.detailNodeName() {
@@ -640,8 +739,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case operationRefreshedMsg:
 		cmds := []tea.Cmd{loadLabs(m.eng)}
 		if m.curTopoLab != "" {
-			cmds = append(cmds, loadTopology(m.eng, m.curTopoLab))
+			cmds = append(cmds, loadTopology(m.eng, m.curTopoLab, m.pendingReload))
 		}
+		m.pendingReload = false
 		return m, tea.Batch(cmds...)
 
 	case escWindowElapsedMsg:
@@ -687,7 +787,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case topologyReloadMsg:
 		if m.curTopoLab != "" {
-			return m, loadTopology(m.eng, m.curTopoLab)
+			return m, loadTopology(m.eng, m.curTopoLab, true)
 		}
 		return m, nil
 
@@ -733,7 +833,7 @@ func (m *Model) handleChange(c engine.Change) tea.Cmd {
 		cmds = append(cmds, loadLabs(m.eng))
 		// Refresh the displayed lab's DevTree if relevant.
 		if m.activeTab == tabTopology && c.LabName == m.curTopoLab {
-			cmds = append(cmds, loadTopology(m.eng, c.LabName))
+			cmds = append(cmds, loadTopology(m.eng, c.LabName, false))
 		}
 		return tea.Batch(cmds...)
 	}
@@ -775,7 +875,14 @@ func (m *Model) maybeLoadTopology() tea.Cmd {
 	if m.activeTab != tabTopology || m.curTopoLab == "" {
 		return nil
 	}
-	return loadTopology(m.eng, m.curTopoLab)
+	return loadTopology(m.eng, m.curTopoLab, false)
+}
+
+func onOff(v bool) string {
+	if v {
+		return "on"
+	}
+	return "off"
 }
 
 // buildWhichKeyRoot returns the which-key menu tree for the active tab and
@@ -801,6 +908,10 @@ func (m *Model) buildWhichKeyRoot() []tabs.MenuNode {
 				{Label: "Pause", ActionID: "pause"},
 				{Label: "Unpause", ActionID: "unpause"},
 				{Label: "View Logs", ActionID: "logs"},
+			}},
+			{Label: "Refresh", Children: []tabs.MenuNode{
+				{Label: "Refresh Now", ActionID: "refresh-ips"},
+				{Label: "Auto Refresh: " + onOff(m.ipAutoRefresh), ActionID: "toggle-ip-autorefresh"},
 			}},
 			{Label: "Trace", DirectKey: "t", ActionID: "trace"},
 			{Label: "Filter", DirectKey: "f", ActionID: "filter"},
@@ -868,6 +979,7 @@ func (m *Model) deployCurrentLab() tea.Cmd {
 		return func() tea.Msg { return errMsg{err} }
 	}
 	m.currentOpCh = ch
+	m.pendingReload = true
 	return runOperation(ch)
 }
 
@@ -910,6 +1022,7 @@ func (m *Model) redeployCurrentLab() tea.Cmd {
 		return func() tea.Msg { return errMsg{err} }
 	}
 	m.currentOpCh = ch
+	m.pendingReload = true
 	return runOperation(ch)
 }
 
@@ -1370,10 +1483,8 @@ func (m *Model) refreshDetail(nodeName string) tea.Cmd {
 	if nodeName == "" {
 		m.detailPane.SetMonitor(nil)
 		m.detailPane.SetInterfaceStatsUnavailable()
-		m.devTree.ClearInterfaceIPs()
 		return nil
 	}
-	m.devTree.ClearInterfaceIPs() // clear stale IPs until fresh data arrives
 	return tea.Batch(
 		m.collectMonitor(m.curTopoLab, nodeName),
 		m.collectInterfaceStats(m.curTopoLab, nodeName),
@@ -1428,6 +1539,7 @@ func (m *Model) scheduleMonitorTick(nodeName string) tea.Cmd {
 // labName/nodeName are captured at scheduling time, never read from m inside
 // the goroutine, so there is no data race with Update mutating m.
 func (m *Model) collectInterfaceIPs(labName, nodeName string) tea.Cmd {
+	gen := m.topologyGen
 	return func() tea.Msg {
 		ip, ok := m.eng.(engine.InterfaceIPProvider)
 		if !ok {
@@ -1440,10 +1552,100 @@ func (m *Model) collectInterfaceIPs(labName, nodeName string) tea.Cmd {
 		defer cancel()
 		ips, err := ip.InterfaceIPs(ctx, labName, nodeName)
 		if err != nil {
-			return interfaceIPMsg{node: nodeName, ips: nil, err: err}
+			return interfaceIPMsg{lab: labName, gen: gen, node: nodeName, ips: nil, err: err}
 		}
-		return interfaceIPMsg{node: nodeName, ips: ips}
+		return interfaceIPMsg{lab: labName, gen: gen, node: nodeName, ips: ips}
 	}
+}
+
+// collectAllInterfaceIPs refreshes business-interface IPs for every fast,
+// running node in the lab. It is a background snapshot: one message applies all
+// results, so the UI stays responsive. Slow/CLI-only kinds are skipped.
+func (m *Model) collectAllInterfaceIPs(labName string, nodes []engine.Node, gen int) tea.Cmd {
+	return func() tea.Msg {
+		ip, ok := m.eng.(engine.InterfaceIPProvider)
+		if !ok {
+			return interfaceIPsBatchMsg{lab: labName, gen: gen}
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		results := make(map[string]map[string]string, len(nodes))
+		var mu sync.Mutex
+		var wg sync.WaitGroup
+		sem := make(chan struct{}, 4)
+		for _, node := range nodes {
+			if node.State != engine.StatusRunning || !fastIPKind(node.Kind) {
+				continue
+			}
+			wg.Add(1)
+			go func(name string) {
+				defer wg.Done()
+				sem <- struct{}{}
+				defer func() { <-sem }()
+				nctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+				defer cancel()
+				ips, err := ip.InterfaceIPs(nctx, labName, name)
+				if err != nil {
+					return
+				}
+				mu.Lock()
+				results[name] = ips
+				mu.Unlock()
+			}(node.Name)
+		}
+		wg.Wait()
+		return interfaceIPsBatchMsg{lab: labName, gen: gen, ips: results}
+	}
+}
+
+// fastIPKind reports whether a node kind can report interface IPs through
+// `ip addr` rather than a vendor CLI. cEOS/XRd are intentionally excluded until
+// their CLI commands and startup cost are verified.
+func fastIPKind(kind string) bool {
+	switch {
+	case kind == "linux", kind == "nokia_srlinux", strings.HasPrefix(kind, "nokia_srlinux"):
+		return true
+	default:
+		return false
+	}
+}
+
+// startFullIPRefresh launches a background IP-only snapshot for the lab. It
+// does not collect monitor or interface stats; selection refresh owns those.
+func (m *Model) startFullIPRefresh(lab *engine.Lab) tea.Cmd {
+	if lab == nil || m.eng == nil || m.ipRefreshing {
+		return nil
+	}
+	if _, ok := m.eng.(engine.InterfaceIPProvider); !ok {
+		return nil
+	}
+	eligible := 0
+	for _, node := range lab.Nodes {
+		if node.State == engine.StatusRunning && fastIPKind(node.Kind) {
+			eligible++
+		}
+	}
+	if eligible == 0 {
+		return nil
+	}
+	m.ipRefreshing = true
+	return m.collectAllInterfaceIPs(lab.Name, lab.Nodes, m.topologyGen)
+}
+
+// ensureIPTicker starts the 30s auto-refresh timer if it is not already
+// running. The timer is independent of whether a refresh is currently in
+// flight; the tick handler skips overlapping refreshes.
+func (m *Model) ensureIPTicker() tea.Cmd {
+	if !m.ipAutoRefresh || m.ipTickerRunning {
+		return nil
+	}
+	m.ipTickerRunning = true
+	m.ipTickerSeq++
+	seq := m.ipTickerSeq
+	return tea.Tick(ipRefreshInterval, func(time.Time) tea.Msg {
+		return ipRefreshTickMsg{seq: seq}
+	})
 }
 
 func (m *Model) View() string {
@@ -1574,6 +1776,48 @@ func renderHelpBar(m *Model, showAll bool) string {
 // statusRight returns the transient/status hint text and its color to show on
 // the right side of the status bar. Priority: toast > error > tracing >
 // limited mode.
+// statusSegment is one right-aligned item in the bottom status bar.
+type statusSegment struct {
+	text  string
+	color lipgloss.Color
+}
+
+// statusSegments returns the right-aligned status items in display order. The
+// auto-refresh icon stays visible alongside tracing/limited state; toast/error
+// text sits at the far right.
+func (m *Model) statusSegments() []statusSegment {
+	var segs []statusSegment
+	if m.activeTab == tabTopology {
+		switch {
+		case m.ipRefreshing:
+			segs = append(segs, statusSegment{"↻ …", lipgloss.Color("214")})
+		case m.ipAutoRefresh:
+			segs = append(segs, statusSegment{"↻ 30s", lipgloss.Color("42")})
+		default:
+			segs = append(segs, statusSegment{"↻ off", lipgloss.Color("240")})
+		}
+	}
+	if m.activeTab == tabSessions && m.sessionModel.IsInsert() &&
+		!m.lastEsc.IsZero() && time.Since(m.lastEsc) <= escDoubleWindow {
+		segs = append(segs, statusSegment{"esc again → normal", lipgloss.Color("214")})
+	}
+	if m.tracing {
+		segs = append(segs, statusSegment{"●", lipgloss.Color("42")})
+	}
+	if _, reason := m.caps.Check(capability.ReqClabPrivileged); reason != "" {
+		segs = append(segs, statusSegment{"⚠", lipgloss.Color("214")})
+	}
+	if m.toast.Visible() {
+		segs = append(segs, statusSegment{m.toast.Message(), lipgloss.Color("196")})
+	}
+	if m.err != nil {
+		segs = append(segs, statusSegment{"ERROR: " + m.err.Error(), lipgloss.Color("196")})
+	}
+	return segs
+}
+
+// statusRight returns the highest-priority segment for tests and callers that
+// only need a single status line.
 func (m *Model) statusRight() (string, lipgloss.Color) {
 	if m.toast.Visible() {
 		return m.toast.Message(), lipgloss.Color("196")
@@ -1586,22 +1830,40 @@ func (m *Model) statusRight() (string, lipgloss.Color) {
 		return "esc again → normal", lipgloss.Color("214")
 	}
 	if m.tracing {
-		return "● TRACING", lipgloss.Color("42")
+		return "●", lipgloss.Color("42")
 	}
 	if _, reason := m.caps.Check(capability.ReqClabPrivileged); reason != "" {
-		return "limited mode", lipgloss.Color("214")
+		return "⚠", lipgloss.Color("214")
+	}
+	if m.activeTab == tabTopology {
+		switch {
+		case m.ipRefreshing:
+			return "↻ …", lipgloss.Color("214")
+		case m.ipAutoRefresh:
+			return "↻ 30s", lipgloss.Color("42")
+		default:
+			return "↻ off", lipgloss.Color("240")
+		}
 	}
 	return "", ""
 }
 
 // renderStatusBar composes a tmux-style bottom line: shortcut hints on the
-// left, status hints (toast/tracing/limited mode/errors) on the right.
+// left, status chips (auto refresh/tracing/limited/toast) on the right.
 func (m *Model) renderStatusBar() string {
 	left := renderHelpBar(m, m.help.ShowAll)
-	text, color := m.statusRight()
-	if text == "" {
+	segs := m.statusSegments()
+	if len(segs) == 0 {
 		return helpBarStyle.Render(left)
 	}
+	var b strings.Builder
+	for i, seg := range segs {
+		if i > 0 {
+			b.WriteString("  ")
+		}
+		b.WriteString(lipgloss.NewStyle().Foreground(seg.color).Bold(true).Render(seg.text))
+	}
+	right := b.String()
 	inner := m.width - 2
 	leftW := lipgloss.Width(left)
 	if leftW > inner {
@@ -1611,8 +1873,11 @@ func (m *Model) renderStatusBar() string {
 	if limit < 1 {
 		limit = 1
 	}
-	trunc := truncateRunes(text, limit)
-	right := lipgloss.NewStyle().Foreground(color).Bold(true).Render(trunc)
+	if lipgloss.Width(right) > limit {
+		// Too wide: keep only the highest-priority item and truncate it.
+		last := segs[len(segs)-1]
+		right = lipgloss.NewStyle().Foreground(last.color).Bold(true).Render(truncateRunes(last.text, limit))
+	}
 	rightW := lipgloss.Width(right)
 	pad := inner - leftW - rightW
 	if pad < 1 {

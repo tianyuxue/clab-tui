@@ -57,9 +57,11 @@ containerlab:
   bin_path: ""    # containerlab 二进制文件路径；留空 = 从 PATH 解析
   timeout: 300    # 保留
 theme: default     # 保留
+topology:
+  auto_refresh: true   # 每 30 秒刷新业务口 IP（仅快速 kind）
 ```
 
-目前仅 `containerlab.bin_path` 会生效。
+`containerlab.bin_path` 和 `topology.auto_refresh` 会生效。which-key 里的开关只改当前会话；想默认关闭就在这里写 `false`。
 
 ## 运行
 

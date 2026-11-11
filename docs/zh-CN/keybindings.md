@@ -42,6 +42,9 @@ clab-tui 完全由键盘驱动。按 `?` 展开帮助栏，或按 `space` 打开
 
 - **拓扑 → Lab**：Switch Lab（切换 Lab）、Deploy（部署）、Destroy（销毁）、
   Redeploy（重新部署）、Edit YAML（编辑 YAML）、View Graph（查看图）。
+- **拓扑 → Refresh**：Refresh Now（立即刷新）、Auto Refresh（自动刷新开关）。状态栏在
+  自动刷新开启时显示 `↻ 30s`，关闭时显示 `↻ off`，刷新中显示 `↻ …`；`●` 表示路径追踪，
+  `⚠` 表示 limited mode。
 - **拓扑 → 节点**：SSH、Start（启动）、Stop（停止）、Restart（重启）、Pause（暂停）、
   Unpause（恢复）、View Logs（查看日志）。
 - **拓扑**：Trace（追踪）、Filter（过滤）、Search（搜索）。

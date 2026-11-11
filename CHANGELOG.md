@@ -10,6 +10,36 @@ Releases before the public launch are not published; see the
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-11
+
+### Added
+
+- Background business-interface IP refresh for the topology tree. On lab load,
+  deploy/redeploy, and edit-YAML reload, all running `linux` / SR Linux nodes
+  are refreshed with a bounded worker pool; the tree keeps cached IPs for
+  unselected nodes.
+- `topology.auto_refresh` config option (default `true`) and a topology
+  `Refresh` which-key group with `Refresh Now` and `Auto Refresh: on/off`.
+  Auto refresh runs every 30 seconds; the which-key toggle is session-only.
+- Status bar chips: `↻ 30s` / `↻ off` / `↻ …` for refresh state, `●` for
+  tracing, and `⚠` for limited mode.
+
+### Changed
+
+- Background/full refreshes collect IPs only; selecting a node still collects
+  monitor data, interface stats, and IPs.
+- Slow/CLI-only kinds (cEOS/XRd) are excluded from background refresh until
+  their commands and startup cost are verified.
+
+### Fixed
+
+- Topology tree `j`/`k` no longer scroll the viewport while the cursor is
+  still inside it; the page scrolls only at the top/bottom edge. `ctrl+f` /
+  `ctrl+b` now move the cursor and viewport by a page instead of being snapped
+  back.
+- A topology search with no matches clears after 3 seconds instead of staying
+  in the tree footer forever.
+
 ## [0.1.4] - 2026-09-21
 
 ### Changed

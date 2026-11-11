@@ -209,6 +209,28 @@ func TestDevTreeRendersInterfaceIP(t *testing.T) {
 	}
 }
 
+func TestDevTreePreservesInterfaceIPsAcrossSameLabReload(t *testing.T) {
+	lab := &engine.Lab{Name: "lab", Nodes: []engine.Node{
+		{Name: "n1", State: engine.StatusRunning, Interfaces: []engine.Interface{{Name: "eth1", State: "up"}}},
+	}}
+	d := NewDevTree()
+	d.SetTopology(lab)
+	d.SetInterfaceIPs("n1", map[string]string{"eth1": "10.0.0.1"})
+	if !strings.Contains(d.View(), "10.0.0.1") {
+		t.Fatal("expected IP before reload")
+	}
+	d.SetTopology(lab)
+	if !strings.Contains(d.View(), "10.0.0.1") {
+		t.Fatal("same-lab live reload must keep cached IPs")
+	}
+	d.SetTopology(&engine.Lab{Name: "other", Nodes: []engine.Node{
+		{Name: "n1", State: engine.StatusRunning, Interfaces: []engine.Interface{{Name: "eth1", State: "up"}}},
+	}})
+	if strings.Contains(d.View(), "10.0.0.1") {
+		t.Fatal("lab switch must clear cached IPs")
+	}
+}
+
 func TestDevTreeInterfaceIPsPerNode(t *testing.T) {
 	d := NewDevTree()
 	d.SetTopology(&engine.Lab{Nodes: []engine.Node{

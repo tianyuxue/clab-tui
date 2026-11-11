@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -93,6 +94,7 @@ type DevTree struct {
 	pathHits     map[string]pathHit
 	pathBlink    bool
 	footerNotice string
+	labName      string
 }
 
 // Search locates the first visible resource row matching term. Node-name
@@ -279,13 +281,20 @@ func (d *DevTree) scrollToCursor(cursorLine int) {
 }
 
 func NewDevTree() *DevTree {
+	vp := viewport.New(60, 20)
+	// The tree owns j/k/arrows for cursor movement. The viewport must not
+	// scroll on the same keys, or one key press moves both the cursor and the
+	// page; scrollToCursor handles visibility instead.
+	vp.KeyMap.Up = key.NewBinding()
+	vp.KeyMap.Down = key.NewBinding()
 	return &DevTree{
 		groups:         map[string][]*devEntry{},
 		entries:        map[string]*devEntry{},
-		vp:             viewport.New(60, 20),
+		vp:             vp,
 		expandedAll:    true,
 		expandedSet:    map[string]bool{},
 		showInterfaces: true,
+		interfaceIPs:   map[string]map[string]string{},
 		pathHits:       map[string]pathHit{},
 	}
 }
@@ -339,7 +348,11 @@ func (d *DevTree) SetTopology(lab *engine.Lab) {
 	d.groups = map[string][]*devEntry{}
 	d.entries = map[string]*devEntry{}
 	d.order = nil
-	d.interfaceIPs = map[string]map[string]string{}
+	if d.interfaceIPs == nil || d.labName != lab.Name {
+		// A different lab means cached IPs belong to another topology.
+		d.interfaceIPs = map[string]map[string]string{}
+		d.labName = lab.Name
+	}
 
 	// Preserve expand/collapse state for nodes that still exist.
 	prevExpanded := d.expandedSet
@@ -414,6 +427,14 @@ func (d *DevTree) SetTopology(lab *engine.Lab) {
 		d.rowCursor = len(rows) - 1
 		if d.rowCursor < 0 {
 			d.rowCursor = 0
+		}
+	}
+	// Drop cached IPs for removed or non-running nodes; a stopped node should
+	// not keep showing its last live address.
+	for name := range d.interfaceIPs {
+		entry, ok := d.entries[name]
+		if !ok || entry.node.State != engine.StatusRunning {
+			delete(d.interfaceIPs, name)
 		}
 	}
 }
@@ -617,16 +638,37 @@ func (d *DevTree) MoveUp() {
 	}
 }
 
+// movePage moves the cursor by one viewport height and scrolls the viewport by
+// the same amount. scrollToCursor in View then makes any final one-line
+// adjustment so the cursor stays visible.
+func (d *DevTree) movePage(delta int) {
+	rows := d.visibleRows()
+	if len(rows) == 0 {
+		return
+	}
+	step := d.vp.Height
+	if step < 1 {
+		step = 1
+	}
+	target := d.rowCursor + delta*step
+	if target < 0 {
+		target = 0
+	}
+	if target >= len(rows) {
+		target = len(rows) - 1
+	}
+	d.selectRow(target)
+	d.vp.SetYOffset(d.vp.YOffset + delta*step)
+}
+
 func (d *DevTree) Update(msg tea.Msg) (*DevTree, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "j", "down":
 			d.MoveDown()
-			d.vp.LineDown(1)
 		case "k", "up":
 			d.MoveUp()
-			d.vp.LineUp(1)
 		case "g":
 			d.cursor = 0
 			d.rowCursor = 0
@@ -643,9 +685,9 @@ func (d *DevTree) Update(msg tea.Msg) (*DevTree, tea.Cmd) {
 		case "N":
 			d.FindPrev()
 		case "ctrl+f":
-			d.vp.PageDown()
+			d.movePage(1)
 		case "ctrl+b":
-			d.vp.PageUp()
+			d.movePage(-1)
 		}
 	}
 	var cmd tea.Cmd

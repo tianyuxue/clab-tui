@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1201,6 +1202,139 @@ func TestSearchCommitRefreshesDetailPane(t *testing.T) {
 	}
 }
 
+func TestFastIPKind(t *testing.T) {
+	for kind, want := range map[string]bool{
+		"linux":         true,
+		"nokia_srlinux": true,
+		"arista_ceos":   false,
+		"cisco_xrd":     false,
+		"":              false,
+	} {
+		if got := fastIPKind(kind); got != want {
+			t.Fatalf("fastIPKind(%q) = %v, want %v", kind, got, want)
+		}
+	}
+}
+
+func TestStatusRightShowsAutoRefreshState(t *testing.T) {
+	m := New(nil, nil, WithCapabilities(capability.Capabilities{ClabSUID: true}))
+	m.activeTab = tabTopology
+	if text, _ := m.statusRight(); !strings.Contains(text, "↻ 30s") {
+		t.Fatalf("auto-refresh on status = %q", text)
+	}
+	m.ipAutoRefresh = false
+	if text, _ := m.statusRight(); !strings.Contains(text, "↻ off") {
+		t.Fatalf("auto-refresh off status = %q", text)
+	}
+	m.ipRefreshing = true
+	if text, _ := m.statusRight(); !strings.Contains(text, "↻ …") {
+		t.Fatalf("refreshing status = %q", text)
+	}
+}
+
+func TestIPTickerStartsOnlyWhenEnabled(t *testing.T) {
+	m := New(nil, nil, WithCapabilities(capability.Capabilities{ClabSUID: true}))
+	m.ipAutoRefresh = true
+	if cmd := m.ensureIPTicker(); cmd == nil {
+		t.Fatal("expected ticker command when auto refresh is on")
+	}
+	if !m.ipTickerRunning {
+		t.Fatal("ticker should be marked running")
+	}
+	if cmd := m.ensureIPTicker(); cmd != nil {
+		t.Fatal("ticker must not start twice")
+	}
+	m.ipAutoRefresh = false
+	m.ipTickerRunning = false
+	if cmd := m.ensureIPTicker(); cmd != nil {
+		t.Fatal("ticker must not start when auto refresh is off")
+	}
+}
+
+func TestInterfaceIPsBatchAppliesAllAndIgnoresStaleLab(t *testing.T) {
+	m := New(nil, nil, WithCapabilities(capability.Capabilities{ClabSUID: true}))
+	m.curTopoLab = "lab"
+	m.topologyGen = 2
+	m.devTree.SetSize(80, 20)
+	m.devTree.SetTopology(&engine.Lab{Name: "lab", Nodes: []engine.Node{
+		{Name: "n1", State: engine.StatusRunning, Interfaces: []engine.Interface{{Name: "eth1", State: "up"}}},
+		{Name: "n2", State: engine.StatusRunning, Interfaces: []engine.Interface{{Name: "eth1", State: "up"}}},
+	}})
+	m.Update(interfaceIPsBatchMsg{lab: "lab", gen: 2, ips: map[string]map[string]string{
+		"n1": {"eth1": "10.0.0.1"},
+		"n2": {"eth1": "10.0.0.2"},
+	}})
+	v := m.devTree.View()
+	if !strings.Contains(v, "10.0.0.1") || !strings.Contains(v, "10.0.0.2") {
+		t.Fatalf("background IPs missing from tree:\n%s", v)
+	}
+
+	m.Update(interfaceIPsBatchMsg{lab: "other", gen: 2, ips: map[string]map[string]string{
+		"n1": {"eth1": "10.9.9.9"},
+	}})
+	if strings.Contains(m.devTree.View(), "10.9.9.9") {
+		t.Fatal("stale-lab batch must not be applied")
+	}
+}
+
+func TestStartFullIPRefreshFiltersSlowAndStoppedNodes(t *testing.T) {
+	fe := &ipFakeEngine{fakeEngine: newFakeEngine()}
+	lab := &engine.Lab{Name: "lab", Nodes: []engine.Node{
+		{Name: "fast1", Kind: "linux", State: engine.StatusRunning},
+		{Name: "fast2", Kind: "nokia_srlinux", State: engine.StatusRunning},
+		{Name: "slow", Kind: "arista_ceos", State: engine.StatusRunning},
+		{Name: "stopped", Kind: "linux", State: engine.StatusStopped},
+	}}
+	m := New(fe, []*engine.Lab{lab}, WithCapabilities(capability.Capabilities{ClabSUID: true}))
+	m.curTopoLab = "lab"
+	m.topologyGen = 1
+
+	cmd := m.startFullIPRefresh(lab)
+	if cmd == nil {
+		t.Fatal("expected a full refresh command")
+	}
+	if !m.ipRefreshing {
+		t.Fatal("refresh should be marked in flight")
+	}
+	msg, ok := cmd().(interfaceIPsBatchMsg)
+	if !ok {
+		t.Fatalf("unexpected message %T", cmd())
+	}
+	for _, name := range []string{"fast1", "fast2"} {
+		if _, ok := msg.ips[name]; !ok {
+			t.Fatalf("missing fast node %q in batch: %+v", name, msg.ips)
+		}
+	}
+	for _, name := range []string{"slow", "stopped"} {
+		if _, ok := msg.ips[name]; ok {
+			t.Fatalf("slow/stopped node %q must be skipped", name)
+		}
+	}
+	fe.mu.Lock()
+	calls := append([]string(nil), fe.calls...)
+	fe.mu.Unlock()
+	if len(calls) != 2 {
+		t.Fatalf("InterfaceIPs calls = %v, want only fast running nodes", calls)
+	}
+}
+
+func TestRefreshDetailKeepsOtherNodeIPs(t *testing.T) {
+	m := New(nil, nil, WithCapabilities(capability.Capabilities{ClabSUID: true}))
+	m.curTopoLab = "lab"
+	m.devTree.SetSize(80, 20)
+	m.devTree.SetTopology(&engine.Lab{Name: "lab", Nodes: []engine.Node{
+		{Name: "n1", State: engine.StatusRunning, Interfaces: []engine.Interface{{Name: "eth1", State: "up"}}},
+		{Name: "n2", State: engine.StatusRunning, Interfaces: []engine.Interface{{Name: "eth1", State: "up"}}},
+	}})
+	m.devTree.SetInterfaceIPs("n1", map[string]string{"eth1": "10.0.0.1"})
+	m.devTree.SetInterfaceIPs("n2", map[string]string{"eth1": "10.0.0.2"})
+	m.refreshDetail("n1")
+	v := m.devTree.View()
+	if !strings.Contains(v, "10.0.0.1") || !strings.Contains(v, "10.0.0.2") {
+		t.Fatalf("selecting one node must not clear other cached IPs:\n%s", v)
+	}
+}
+
 func TestNoMatchSearchShowsFooterStatus(t *testing.T) {
 	m := New(nil, nil)
 	m.activeTab = tabTopology
@@ -1216,6 +1350,46 @@ func TestNoMatchSearchShowsFooterStatus(t *testing.T) {
 	}
 	if got := m.topologyNotice(); !strings.Contains(got, "no match") {
 		t.Fatalf("expected no-match status in topology footer, got %q", got)
+	}
+}
+
+func TestNoMatchSearchClearsAfterTimeout(t *testing.T) {
+	m := New(nil, nil)
+	m.activeTab = tabTopology
+	m.devTree.SetTopology(&engine.Lab{
+		Nodes: []engine.Node{{Name: "spine-01", Group: "spine"}},
+	})
+	result, cmd := m.Update(tabs.SearchCommitMsg{Term: "zzz"})
+	m = result.(*Model)
+	if cmd == nil {
+		t.Fatal("expected a no-match timeout command")
+	}
+	seq := m.searchSeq
+	result, _ = m.Update(clearNoMatchMsg{seq: seq})
+	m = result.(*Model)
+	if got := m.topologyNotice(); got != "" {
+		t.Fatalf("no-match notice should clear after timeout, got %q", got)
+	}
+	if m.devTree.SearchStatus() != "" {
+		t.Fatalf("search should be cleared, status = %q", m.devTree.SearchStatus())
+	}
+}
+
+func TestNoMatchTimeoutDoesNotClearNewSearch(t *testing.T) {
+	m := New(nil, nil)
+	m.activeTab = tabTopology
+	m.devTree.SetTopology(&engine.Lab{
+		Nodes: []engine.Node{{Name: "spine-01", Group: "spine"}},
+	})
+	result, _ := m.Update(tabs.SearchCommitMsg{Term: "zzz"})
+	m = result.(*Model)
+	staleSeq := m.searchSeq
+	result, _ = m.Update(tabs.SearchCommitMsg{Term: "spine"})
+	m = result.(*Model)
+	result, _ = m.Update(clearNoMatchMsg{seq: staleSeq})
+	m = result.(*Model)
+	if got := m.topologyNotice(); !strings.Contains(got, "match") {
+		t.Fatalf("new search status should survive old timeout, got %q", got)
 	}
 }
 
@@ -1355,6 +1529,20 @@ func (f *fakeEngine) StreamNodeLogs(ctx context.Context, labName, nodeName strin
 	ch := make(chan engine.OutputLine, 1)
 	ch <- engine.OutputLine{Done: true}
 	return ch, nil
+}
+
+// ipFakeEngine implements InterfaceIPProvider for background-refresh tests.
+type ipFakeEngine struct {
+	*fakeEngine
+	mu    sync.Mutex
+	calls []string
+}
+
+func (f *ipFakeEngine) InterfaceIPs(_ context.Context, labName, nodeName string) (map[string]string, error) {
+	f.mu.Lock()
+	f.calls = append(f.calls, nodeName)
+	f.mu.Unlock()
+	return map[string]string{"eth1": "10.0.0." + nodeName}, nil
 }
 
 // refreshFakeEngine records LiveRefresher calls so tests can assert that a
@@ -2790,11 +2978,11 @@ func TestCapDenialToastVisibleInLimitedMode(t *testing.T) {
 	if !strings.Contains(frame, "containerlab needs root") {
 		t.Fatalf("denial toast missing from status bar:\n%s", frame)
 	}
-	// Once the toast expires, the limited-mode hint shows on the right instead.
+	// Once the toast expires, the limited-mode icon shows on the right instead.
 	m.toast.Hide()
 	frame = tmuxANSI.ReplaceAllString(m.View(), "")
-	if !strings.Contains(frame, "limited mode") {
-		t.Fatalf("limited-mode hint missing from status bar:\n%s", frame)
+	if !strings.Contains(frame, "⚠") {
+		t.Fatalf("limited-mode icon missing from status bar:\n%s", frame)
 	}
 	if strings.Contains(frame, "limited mode: run sudo") {
 		t.Fatalf("long limited-mode notice should not render:\n%s", frame)

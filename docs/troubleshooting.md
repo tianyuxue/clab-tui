@@ -55,8 +55,8 @@ process or set a different `CLAB_TUI_GRAPH_PORT`.
 
 The config lives at `$XDG_CONFIG_HOME/clab-tui/config.yaml`, or
 `~/.config/clab-tui/config.yaml` when `XDG_CONFIG_HOME` is unset. A parse error is
-printed to stderr and defaults are used. Only `containerlab.bin_path` currently has an
-effect; `timeout` and `theme` are reserved.
+printed to stderr and defaults are used. `containerlab.bin_path` and
+`topology.auto_refresh` have an effect; `timeout` and `theme` are reserved.
 
 ## Edit YAML opens the wrong editor
 
