@@ -340,6 +340,21 @@ func TestDecodePktEventWithPayload(t *testing.T) {
 	}
 }
 
+// TestDecodePktEventPreservesFullSnapshot verifies the decoder copies the whole
+// payload area, including the bytes that used to be struct tail padding. The
+// VLAN fix uses those bytes to keep a 132-byte Ethernet snapshot.
+func TestDecodePktEventPreservesFullSnapshot(t *testing.T) {
+	raw := make([]byte, pktEventSize)
+	raw[len(raw)-1] = 0xAB
+	ev, err := decodePktEvent(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ev.Payload[len(ev.Payload)-1]; got != 0xAB {
+		t.Fatalf("last payload byte = 0x%02x, want 0xab (decoder must copy the full payload area)", got)
+	}
+}
+
 func TestDecodePktEventRejectsWrongSize(t *testing.T) {
 	if _, err := decodePktEvent(make([]byte, 10)); err == nil {
 		t.Fatal("expected error for wrong size")

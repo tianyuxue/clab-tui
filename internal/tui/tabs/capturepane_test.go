@@ -258,6 +258,26 @@ func TestParsePacketDetailDecodesVLAN(t *testing.T) {
 	}
 }
 
+// TestParsePacketDetailTaggedTCPReportsCorrectPayloadLength verifies the
+// Ethernet header length used for the TCP payload calculation includes the
+// 802.1Q tag. Otherwise a tagged frame reports 4 extra payload bytes.
+func TestParsePacketDetailTaggedTCPReportsCorrectPayloadLength(t *testing.T) {
+	eth := &layers.Ethernet{SrcMAC: []byte{0, 1, 2, 3, 4, 5}, DstMAC: []byte{6, 7, 8, 9, 10, 11}, EthernetType: layers.EthernetTypeDot1Q}
+	vlan := &layers.Dot1Q{VLANIdentifier: 10, Type: layers.EthernetTypeIPv4}
+	ip := &layers.IPv4{Version: 4, IHL: 5, TTL: 64, SrcIP: []byte{10, 0, 0, 1}, DstIP: []byte{10, 0, 0, 2}, Protocol: layers.IPProtocolTCP}
+	tcp := &layers.TCP{SrcPort: 1234, DstPort: 80, ACK: true, Window: 100}
+	tcp.SetNetworkLayerForChecksum(ip)
+	buf := gopacket.NewSerializeBuffer()
+	opts := gopacket.SerializeOptions{ComputeChecksums: true, FixLengths: true}
+	if err := gopacket.SerializeLayers(buf, opts, eth, vlan, ip, tcp, gopacket.Payload([]byte("0123456789"))); err != nil {
+		t.Fatal(err)
+	}
+	detail := parsePacketDetail(buf.Bytes(), len(buf.Bytes()))
+	if !strings.Contains(detail, "length 10") {
+		t.Fatalf("expected TCP payload length 10 in tagged frame, got %q", detail)
+	}
+}
+
 func TestParsePacketDetailDecodesIPv6ICMP(t *testing.T) {
 	eth := &layers.Ethernet{SrcMAC: []byte{0, 1, 2, 3, 4, 5}, DstMAC: []byte{6, 7, 8, 9, 10, 11}, EthernetType: layers.EthernetTypeIPv6}
 	ip := &layers.IPv6{Version: 6, HopLimit: 64, SrcIP: net.ParseIP("2001:db8::1").To16(), DstIP: net.ParseIP("2001:db8::2").To16(), NextHeader: layers.IPProtocolICMPv6}
@@ -301,7 +321,7 @@ func TestParsePacketDetailDecodesARP(t *testing.T) {
 }
 
 // TestParsePacketDetailTruncatesToPktLen verifies trailing zero padding beyond
-// the real packet length is ignored (kernel copies only the first 128 bytes).
+// the real packet length is ignored (the kernel copies a bounded snapshot).
 func TestParsePacketDetailTruncatesToPktLen(t *testing.T) {
 	body := samplePacket(t)
 	padded := append([]byte{}, body...)

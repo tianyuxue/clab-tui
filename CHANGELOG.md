@@ -10,6 +10,20 @@ Releases before the public launch are not published; see the
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-18
+
+### Fixed
+
+- Interface capture now displays 802.1Q VLAN tags on trunk ports. veth (and
+  most NICs) offload VLAN tags into `skb` metadata, which the TC capture
+  program did not read; it now rebuilds the tag from `skb->vlan_tci` before
+  the frame reaches gopacket, pcap export, and libpcap filters. Capture filters
+  such as `vlan 10` now match, and exported pcap files carry real 802.1Q bytes.
+- In-band 802.1Q/802.1ad frames are parsed with the correct L3/L4 offset, so
+  their source/destination IPs and TCP/UDP ports are populated.
+- TCP/UDP ports reported by the capture engine are converted from network byte
+  order; the packet summary no longer shows byte-swapped ports.
+
 ## [0.2.0] - 2026-11-11
 
 ### Added

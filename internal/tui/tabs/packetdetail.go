@@ -10,8 +10,8 @@ import (
 
 // parsePacketDetail 用 gopacket 解码 eBPF 抓到的原始以太网包体，返回
 // tcpdump -ennl 风格的单行详情。payload 是 ParsedPacket.Payload（内核只
-// 复制包体前 128 字节，其后为全零填充），pktLen 是真实包长（ev.Len），
-// 用于截断尾部零填充。返回空串表示无法解析（不是以太网帧）。
+// 复制包体前 132 字节，其后不保证有效），pktLen 是真实包长（含合成的
+// 802.1Q 标签），用于截断尾部无效字节。返回空串表示无法解析（不是以太网帧）。
 func parsePacketDetail(payload []byte, pktLen int) string {
 	if pktLen < 14 || len(payload) < 14 {
 		return ""
@@ -36,15 +36,28 @@ func parsePacketDetail(payload []byte, pktLen int) string {
 		fmt.Fprintf(&b, "vlan %d, ", vlan.(*layers.Dot1Q).VLANIdentifier)
 	}
 
+	// The Ethernet header grows by 4 bytes per 802.1Q/802.1ad tag. It is
+	// needed to keep the TCP payload length accurate for tagged frames.
+	ethHeaderLen := 14
+	for i, l := range p.Layers() {
+		if i == 0 { // Ethernet itself
+			continue
+		}
+		if l.LayerType() != layers.LayerTypeDot1Q {
+			break
+		}
+		ethHeaderLen += 4
+	}
+
 	// 网络层
 	if ip := p.Layer(layers.LayerTypeIPv4); ip != nil {
 		ipL := ip.(*layers.IPv4)
 		writeIPSummary(&b, p, ipL.SrcIP.String(), ipL.DstIP.String(),
-			ipL.Protocol.String(), ipL.Protocol, pktLen, int(ipL.IHL)*4)
+			ipL.Protocol.String(), ipL.Protocol, pktLen, int(ipL.IHL)*4, ethHeaderLen)
 	} else if ip := p.Layer(layers.LayerTypeIPv6); ip != nil {
 		ipL := ip.(*layers.IPv6)
 		writeIPSummary(&b, p, ipL.SrcIP.String(), ipL.DstIP.String(),
-			ipL.NextHeader.String(), ipL.NextHeader, pktLen, 40)
+			ipL.NextHeader.String(), ipL.NextHeader, pktLen, 40, ethHeaderLen)
 	} else if arp := p.Layer(layers.LayerTypeARP); arp != nil {
 		arpL := arp.(*layers.ARP)
 		fmt.Fprintf(&b, "ARP %s: %s > %s (%s)",
@@ -56,8 +69,9 @@ func parsePacketDetail(payload []byte, pktLen int) string {
 
 // writeIPSummary 追加网络层 + 传输层的 tcpdump 风格摘要。
 // networkHeaderLen is the L3 header length in bytes (IPv4 IHL or 40 for
-// IPv6's base header). It keeps TCP payload length correct for both versions.
-func writeIPSummary(b *strings.Builder, p gopacket.Packet, srcIP, dstIP, protoName string, proto layers.IPProtocol, pktLen, networkHeaderLen int) {
+// IPv6's base header). ethHeaderLen includes the base Ethernet header plus any
+// 802.1Q tags. Both keep TCP payload length correct.
+func writeIPSummary(b *strings.Builder, p gopacket.Packet, srcIP, dstIP, protoName string, proto layers.IPProtocol, pktLen, networkHeaderLen, ethHeaderLen int) {
 	switch proto {
 	case layers.IPProtocolTCP:
 		if tcp := p.Layer(layers.LayerTypeTCP); tcp != nil {
@@ -70,7 +84,7 @@ func writeIPSummary(b *strings.Builder, p gopacket.Packet, srcIP, dstIP, protoNa
 				fmt.Fprintf(b, ", ack %d", tcpL.Ack)
 			}
 			fmt.Fprintf(b, ", win %d, length %d",
-				tcpL.Window, payloadLen(pktLen, 14, networkHeaderLen, int(tcpL.DataOffset)*4))
+				tcpL.Window, payloadLen(pktLen, ethHeaderLen, networkHeaderLen, int(tcpL.DataOffset)*4))
 			return
 		}
 	case layers.IPProtocolUDP:

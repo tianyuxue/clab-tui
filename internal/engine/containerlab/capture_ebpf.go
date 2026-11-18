@@ -30,10 +30,15 @@ import (
 //
 // Memory layout: ifindex@0(4) direction@4(4) netns_ino@8(8) saddr@16(4)
 // daddr@20(4) sport@24(2) dport@26(2) proto@28(1) ipver@29(1) pad(2)
-// len@32(4) payload@36(128), tail-padded to 168 bytes (each ringbuf sample).
+// len@32(4) payload@36(132). Struct size stays 168 bytes because the 132-byte
+// payload exactly fills the space that used to be tail padding.
 //
 // direction: 1 = ingress, 2 = egress (see tc_capture_ingress/egress in BPF).
 // Both directions are captured so the UI can show the complete packet path.
+//
+// The BPF program rebuilds an offloaded 802.1Q tag (skb->vlan_tci) after the
+// two MAC addresses and adds 4 to Len, so Payload is always a wire-format
+// Ethernet frame and gopacket/pcap see the VLAN header.
 //
 // netns_ino is actually bpf_get_netns_cookie(skb) (net->net_cookie), not the
 // inode of /proc/<pid>/ns/net. It is unreliable on forwarding paths (returns
@@ -50,11 +55,12 @@ type pktEventRaw struct {
 	Proto     uint8
 	IPVer     uint8
 	Len       uint32
-	Payload   [128]byte // first 128 bytes of the packet body, truncated to Len
+	Payload   [132]byte // wire-format frame bytes (VLAN tag included when offloaded)
 }
 
-// pktEventSize is the on-wire size of C struct pkt_event including alignment
-// padding, also the length of every ringbuf sample.
+// pktEventSize is the on-wire size of C struct pkt_event, also the length of
+// every ringbuf sample. It is unchanged by the 132-byte payload: the old
+// 128-byte payload was followed by 4 bytes of tail padding.
 const pktEventSize = 168
 
 // Direction constants matching the BPF program (tc_capture_ingress/egress).
@@ -582,7 +588,7 @@ func decodePktEvent(b []byte) (pktEventRaw, error) {
 	ev.Proto = b[28]
 	ev.IPVer = b[29]
 	ev.Len = binary.LittleEndian.Uint32(b[32:36])
-	copy(ev.Payload[:], b[36:164])
+	copy(ev.Payload[:], b[36:168])
 	return ev, nil
 }
 
@@ -620,7 +626,10 @@ func ip4Str(ip uint32) string {
 	return net.IP{byte(ip), byte(ip >> 8), byte(ip >> 16), byte(ip >> 24)}.String()
 }
 
-const captureFilterSnapLen = 128
+// captureFilterSnapLen is the pcap snapshot length and the libpcap filter
+// buffer size. 132 keeps the full 128-byte frame snapshot plus the synthesized
+// 4-byte 802.1Q header.
+const captureFilterSnapLen = 132
 
 // compileCaptureFilter compiles a complete tcpdump/libpcap expression for an
 // Ethernet frame. Empty input intentionally means "match everything".
