@@ -27,7 +27,12 @@
 - **抓包与追踪**：基于 eBPF 的入向/出向抓包，支持完整的 libpcap 过滤器，并可对
   Lab 进行实时路径追踪。
 - **图视图**：在浏览器中打开分层拓扑图。
-- **键盘驱动**：vim 风格的导航，以及 `space` which-key 菜单。
+- **多标签页工作区**：在 Topology、Sessions、Node Logs 和 Ops Log 之间切换，
+  无需离开终端。
+- **实时更新**：自动刷新拓扑状态和业务接口 IP，也可以手动刷新；默认刷新间隔为
+  30 秒。
+- **键盘驱动**：vim 风格的导航、上下文相关帮助，以及展示当前视图可用操作的
+  模态 `space` which-key 菜单。
 
 ## 环境要求
 
@@ -82,8 +87,9 @@ clab-tui --file /path/to/lab.clab.yml
 ```
 
 典型流程：选择一个 Lab → `l` → Deploy（部署） → 查看拓扑树 → 按 `o` 打开
-节点操作（shell 会话、启动/停止/重启、日志）→ 按 `space` 打开
-which-key 菜单。参见 [快速开始](docs/getting-started.md)。
+节点或接口操作（shell 会话、生命周期控制、日志、抓包和 Netem）→ 使用标签页
+查看会话和日志 → 按 `space` 打开与当前视图相关的 which-key 菜单。参见
+[快速开始](docs/getting-started.md)。
 
 ## 权限
 
@@ -93,25 +99,62 @@ clab-tui 在浏览和基于 Docker 的操作中无需 root 即可使用。当条
 
 ## 文档
 
-- [文档索引](docs/index.md)
-- [快速开始](docs/getting-started.md)
-- [快捷键](docs/keybindings.md)
-- [权限](docs/permissions.md)
-- [常见问题](docs/troubleshooting.md)
+- [文档索引](docs/zh-CN/index.md)
+- [快速开始](docs/zh-CN/getting-started.md)
+- [快捷键](docs/zh-CN/keybindings.md)
+- [权限](docs/zh-CN/permissions.md)
+- [常见问题](docs/zh-CN/troubleshooting.md)
 
 ## 快捷键
 
+下面列出最常用的快捷键。按 `?` 展开帮助栏，或按 `space` 打开当前标签页的
+模态菜单。表格中的“拓扑”等上下文表示该快捷键在对应标签页中生效。
+
+### 全局
+
 | 按键 | 操作 |
 |-----|--------|
+| `q` / `ctrl+c` | 退出（没有会话或抓包面板占用该按键时） |
 | `tab` / `shift+tab` | 下一个 / 上一个标签页 |
 | `1`–`4` | 跳转到 Topology / Sessions / Node Logs / Ops Log |
-| `space` | 打开 which-key 菜单 |
-| `l` | Lab 操作（Topology） |
-| `o` | 节点 / 接口操作（Topology） |
-| `/` | 搜索（Topology） |
-| `t` / `f` | 切换追踪 / 更改追踪过滤器（Topology） |
+| `space` | 打开与当前上下文相关的 which-key 菜单 |
 | `?` | 切换展开的帮助栏 |
-| `q` | 退出 |
+
+### 拓扑
+
+| 按键 | 操作 |
+|-----|--------|
+| `j` / `k` | 下移 / 上移 |
+| `g` / `G` | 跳到顶部 / 底部 |
+| `ctrl+f` / `ctrl+b` | 向下翻页 / 向上翻页 |
+| `enter` | 展开或收起所选节点的连接 |
+| `x` / `i` | 切换所有连接摘要 / 接口行 |
+| `/` / `n` / `N` | 搜索 / 下一个 / 上一个匹配项 |
+| `t` / `f` | 开始或停止路径追踪 / 更改追踪过滤器 |
+| `l` | 打开 Lab 操作：切换、部署、销毁、重新部署、编辑或查看图 |
+| `o` | 打开节点或接口操作 |
+
+### 日志与抓包
+
+| 按键 | 操作 |
+|-----|--------|
+| `f` | 切换跟随（Node Logs 或 Ops Log） |
+| `c` | 清除（Node Logs 或 Ops Log） |
+| `g` / `G` | 跳到顶部 / 底部（Node Logs） |
+| `q` / `c` / `p` / `w` | 关闭 / 清除 / 暂停 / 保存 pcap（抓包面板） |
+
+### 会话
+
+会话默认处于**插入模式**，所有按键都会发送到活动 shell，包括 `ctrl+c` 和
+`tab`。按 `ctrl+\` 或快速双击 `Esc` 进入普通模式。普通模式下：
+
+| 按键 | 操作 |
+|-----|--------|
+| `enter` / `space` | 返回插入模式 |
+| `s` | 打开会话选择器 |
+| 已分配的标签（`a`–`z`） | 切换到带对应标签的会话 |
+| `q` | 关闭活动会话 |
+| `j` / `k` | 滚动终端视口 |
 
 完整参考：[快捷键](docs/keybindings.md)。
 
