@@ -25,6 +25,17 @@ On startup clab-tui checks:
 - **Linux capabilities** — `CAP_BPF`, `CAP_NET_ADMIN`, `CAP_SYS_ADMIN`, `CAP_SYS_PTRACE`.
 - **BTF** — `/sys/kernel/btf/vmlinux` exists (required for eBPF).
 
+## Running as root
+
+`clab-tui --sudo ...` works from any install location: it re-executes the binary through
+sudo using its absolute path, so a `~/.local/bin` install is not hidden by sudo's
+`secure_path`. If clab-tui is installed to `/usr/local/bin` with `make install-system`,
+`sudo clab-tui ...` also works directly.
+
+The re-executed process runs as root, so it reads root's config
+(`/root/.config/clab-tui/config.yaml`) instead of your user config, and files it creates
+are owned by root.
+
 ## Granting access
 
 ### Docker access
@@ -35,12 +46,12 @@ Add your user to the `docker` group and re-login:
 sudo usermod -aG docker "$USER"
 ```
 
-Alternatively, run clab-tui with `sudo`.
+Alternatively, run `clab-tui --sudo` (or `sudo clab-tui` when installed system-wide).
 
 ### Deploy / destroy / events
 
-containerlab needs root unless its binary is setuid. Either run clab-tui with `sudo`,
-or enable SUID:
+containerlab needs root unless its binary is setuid. Either run `clab-tui --sudo`, or
+enable SUID:
 
 ```bash
 sudo chmod u+s "$(command -v containerlab)"
@@ -50,7 +61,7 @@ sudo chmod u+s "$(command -v containerlab)"
 
 Tracing needs one of:
 
-- run clab-tui with `sudo`; or
+- run `clab-tui --sudo` (or `sudo clab-tui`); or
 - grant the four capabilities and have kernel BTF available.
 
 If the requirements are unmet, starting a trace or capture shows:
@@ -66,7 +77,10 @@ broken link.
 
 ## Notes
 
-- Running with `sudo` changes the user that owns configuration and generated files.
+- Running with `sudo` changes the user that owns configuration and generated files, and
+  makes clab-tui read root's config under `/root/.config/clab-tui/`.
+- If `containerlab` is installed outside root's `PATH` (for example in `~/.local/bin`),
+  set `containerlab.bin_path` in root's config or install it system-wide.
 - SUID on `containerlab` grants privilege to anyone who can execute it; only do this on
   a machine you trust.
 - Docker group membership is effectively root-equivalent on the host.

@@ -24,6 +24,16 @@ clab-tui 的大部分浏览操作和基于 Docker 的操作都无需 root 即可
 - **Linux capabilities**——`CAP_BPF`、`CAP_NET_ADMIN`、`CAP_SYS_ADMIN`、`CAP_SYS_PTRACE`。
 - **BTF**——存在 `/sys/kernel/btf/vmlinux`（eBPF 所需）。
 
+## 以 root 运行
+
+`clab-tui --sudo ...` 适用于任意安装位置：它会用二进制的绝对路径通过 sudo 重新执行，
+因此安装在 `~/.local/bin` 时不会被 sudo 的 `secure_path` 挡住。如果用
+`make install-system` 安装到 `/usr/local/bin`，也可以直接运行 `sudo clab-tui ...`。
+
+重新执行后的进程以 root 身份运行，因此读取的是 root 的配置
+（`/root/.config/clab-tui/config.yaml`）而不是你的用户配置，它创建的文件也归 root
+所有。
+
 ## 授予访问权限
 
 ### Docker 访问
@@ -34,12 +44,12 @@ clab-tui 的大部分浏览操作和基于 Docker 的操作都无需 root 即可
 sudo usermod -aG docker "$USER"
 ```
 
-也可以使用 `sudo` 运行 clab-tui。
+也可以使用 `clab-tui --sudo`（安装到系统目录后可用 `sudo clab-tui`）运行。
 
 ### 部署 / 销毁 / 事件
 
-除非二进制文件设置了 setuid，否则 containerlab 需要 root。可以用 `sudo` 运行 clab-tui，
-或启用 SUID：
+除非二进制文件设置了 setuid，否则 containerlab 需要 root。可以用 `clab-tui --sudo`
+运行，或启用 SUID：
 
 ```bash
 sudo chmod u+s "$(command -v containerlab)"
@@ -49,7 +59,7 @@ sudo chmod u+s "$(command -v containerlab)"
 
 追踪需要满足以下条件之一：
 
-- 使用 `sudo` 运行 clab-tui；或
+- 使用 `clab-tui --sudo`（或 `sudo clab-tui`）运行；或
 - 授予上述四个 capabilities，并确保内核 BTF 可用。
 
 如果要求未满足，启动追踪或抓包时会显示：
@@ -64,6 +74,9 @@ sudo chmod u+s "$(command -v containerlab)"
 
 ## 注意事项
 
-- 使用 `sudo` 运行会改变配置文件和生成文件的属主用户。
+- 使用 `sudo` 运行会改变配置文件和生成文件的属主用户，并且 clab-tui 会读取
+  `/root/.config/clab-tui/` 下 root 的配置。
+- 如果 `containerlab` 安装在 root 的 `PATH` 之外（例如 `~/.local/bin`），请在 root 的
+  配置中设置 `containerlab.bin_path`，或将其安装到系统目录。
 - 为 `containerlab` 设置 SUID 会让任何能执行它的人获得特权；请仅在你信任的机器上这样做。
 - 在宿主机上，加入 Docker 组实际上等同于拥有 root 权限。

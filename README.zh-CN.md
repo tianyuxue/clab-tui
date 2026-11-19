@@ -76,6 +76,17 @@ make build
 make build-dynamic
 ```
 
+安装二进制：
+
+```bash
+make install          # ~/.local/bin（无需 sudo）
+make install-system   # /usr/local/bin（仅安装步骤使用 sudo）
+```
+
+`make install-system` 会把二进制放到 root 的 `PATH` 中，因此可以直接使用
+`sudo clab-tui ...`。安装在用户目录同样可以提权运行：`clab-tui --sudo ...` 会用
+二进制的绝对路径通过 sudo 重新执行，从而绕过 sudo 的 `secure_path`。
+
 ## 快速开始
 
 ```bash
@@ -84,6 +95,9 @@ clab-tui --dir /path/to/labs
 
 # 直接打开单个 Lab
 clab-tui --file /path/to/lab.clab.yml
+
+# 以完整权限运行（通过 sudo 重新执行当前二进制）
+clab-tui --sudo --dir /path/to/labs
 ```
 
 典型流程：选择一个 Lab → `l` → Deploy（部署） → 查看拓扑树 → 按 `o` 打开
@@ -96,6 +110,11 @@ clab-tui --file /path/to/lab.clab.yml
 clab-tui 在浏览和基于 Docker 的操作中无需 root 即可使用。当条件不满足时，特权操作会
 显示 toast 提示且不会执行 —— 它绝不会静默失败。完整模型以及如何授予各项能力参见
 [权限](docs/permissions.md)。
+
+需要特权功能时，可以从任意安装位置运行 `clab-tui --sudo ...`，或用
+`make install-system` 安装到系统目录后运行 `sudo clab-tui ...`。两者都会以 root
+身份运行：clab-tui 读取 root 的配置（`/root/.config/clab-tui/`），它创建的文件也归
+root 所有。
 
 ## 文档
 

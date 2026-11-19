@@ -10,6 +10,16 @@ Releases before the public launch are not published; see the
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-19
+
+### Added
+
+- `clab-tui --sudo` re-executes the binary through sudo using its absolute path, so a
+  user-local install works for privileged operations without relying on sudo's
+  `secure_path`.
+- `make install-system` installs the binary to `/usr/local/bin` so `sudo clab-tui ...`
+  works directly from root's `PATH`.
+
 ## [0.2.1] - 2026-11-18
 
 ### Fixed

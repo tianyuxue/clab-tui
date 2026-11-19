@@ -43,6 +43,16 @@ make build
 make build-dynamic
 ```
 
+然后安装二进制：
+
+```bash
+make install          # ~/.local/bin
+make install-system   # /usr/local/bin；仅安装步骤使用 sudo
+```
+
+两种安装位置都可以使用 `clab-tui --sudo ...`，它会用二进制的绝对路径通过 sudo 重新
+执行。安装到系统目录后，还可以直接从 root 的 `PATH` 运行 `sudo clab-tui ...`。
+
 <!-- TODO 截图：静态构建输出
 ![构建 clab-tui](../assets/screenshots/getting-started-build.png)
 -->

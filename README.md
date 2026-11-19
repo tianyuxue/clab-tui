@@ -78,6 +78,18 @@ If the static dependencies are unavailable, use the dynamic fallback:
 make build-dynamic
 ```
 
+Install the binary:
+
+```bash
+make install          # ~/.local/bin (no sudo)
+make install-system   # /usr/local/bin (sudo only for the install step)
+```
+
+`make install-system` puts the binary on root's `PATH`, so `sudo clab-tui ...` works
+directly. A user-local install also works for privileged use: `clab-tui --sudo ...`
+re-executes the binary through sudo using its absolute path, which bypasses sudo's
+`secure_path`.
+
 ## Quick start
 
 ```bash
@@ -86,6 +98,9 @@ clab-tui --dir /path/to/labs
 
 # Open a single lab directly
 clab-tui --file /path/to/lab.clab.yml
+
+# Run with full privileges (re-executes this binary via sudo)
+clab-tui --sudo --dir /path/to/labs
 ```
 
 Typical flow: pick a lab → `l` → Deploy → inspect the topology tree → press `o` for
@@ -99,6 +114,11 @@ clab-tui is usable without root for browsing and Docker-backed operations. Privi
 operations show a toast and are not executed when requirements are unmet — it never
 fails silently. See [Permissions](docs/permissions.md) for the full model and how to
 grant each capability.
+
+For privileged features, run `clab-tui --sudo ...` from any install location, or install
+system-wide with `make install-system` and run `sudo clab-tui ...`. Both run the process
+as root: clab-tui reads root's config (`/root/.config/clab-tui/`), and files it creates
+are owned by root.
 
 ## Documentation
 

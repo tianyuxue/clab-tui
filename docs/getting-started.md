@@ -43,6 +43,17 @@ If the static libraries are unavailable, use the dynamic fallback:
 make build-dynamic
 ```
 
+Then install the binary:
+
+```bash
+make install          # ~/.local/bin
+make install-system   # /usr/local/bin; sudo only for the install step
+```
+
+Either location works with `clab-tui --sudo ...`, which re-executes the binary through
+sudo using its absolute path. `make install-system` additionally makes `sudo clab-tui ...`
+work directly from root's `PATH`.
+
 <!-- TODO screenshot: static build output
 ![Building clab-tui](assets/screenshots/getting-started-build.png)
 -->

@@ -15,7 +15,7 @@ containerlab SUID 或追踪 capabilities。
 ## 状态栏显示 "limited mode"
 
 containerlab 权限不可用，因此无法读取实时接口状态。浏览功能仍可正常使用。要获取完整
-数据，请使用 `sudo` 运行，或启用 containerlab SUID。
+数据，请使用 `clab-tui --sudo` 运行，或启用 containerlab SUID。
 
 ## 链路显示 UNKNOWN
 
@@ -24,7 +24,7 @@ containerlab 权限不可用，因此无法读取实时接口状态。浏览功�
 
 ## Docker 权限被拒绝
 
-将你的用户加入 `docker` 组并重新登录，或使用 `sudo` 运行：
+将你的用户加入 `docker` 组并重新登录，或使用 `clab-tui --sudo` 运行：
 
 ```bash
 sudo usermod -aG docker "$USER"

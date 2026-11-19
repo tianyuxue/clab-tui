@@ -1,5 +1,7 @@
 BINARY=clab-tui
 BINDIR?=$(HOME)/.local/bin
+SYSTEM_PREFIX?=/usr/local
+SYSTEM_BINDIR=$(DESTDIR)$(SYSTEM_PREFIX)/bin
 GOBUILD=go build
 GOTEST=go test
 GOMOD=$(GOBUILD) ./...
@@ -8,7 +10,7 @@ VERSION_LDFLAGS=-X main.version=$(VERSION)
 STATIC_CGO_LDFLAGS=$(shell pkg-config --static --libs libpcap libcap 2>/dev/null)
 STATIC_LDFLAGS=$(VERSION_LDFLAGS) -linkmode external -extldflags "-static"
 
-.PHONY: all build build-static build-dynamic install uninstall test test-unit test-ui test-tmux integration-base-prereqs integration-prereqs integration-scale-prereqs integration-kind-prereqs test-integration test-integration-full test-integration-smoke test-integration-scale test-integration-kinds test-integration-all test-ebpf test-ebpf-focused test-all update-golden clean lint fmt run vet run-testdata run-demo
+.PHONY: all build build-static build-dynamic install install-system check-not-sudo uninstall test test-unit test-ui test-tmux integration-base-prereqs integration-prereqs integration-scale-prereqs integration-kind-prereqs test-integration test-integration-full test-integration-smoke test-integration-scale test-integration-kinds test-integration-all test-ebpf test-ebpf-focused test-all update-golden clean lint fmt run vet run-testdata run-demo
 
 all: fmt lint test build
 
@@ -30,6 +32,25 @@ install: build
 	@mkdir -p "$(BINDIR)"
 	install -m 0755 $(BINARY) "$(BINDIR)/$(BINARY)"
 	@echo "installed $(BINARY) -> $(BINDIR)/$(BINARY)"
+
+# Install to a system path that root's PATH includes. The build still runs as
+# the invoking user; only the install step needs root. Do not prefix the whole
+# make invocation with sudo, or the build artifacts become root-owned.
+check-not-sudo:
+	@if [ -n "$${SUDO_USER:-}" ]; then \
+		echo "install-system: run without sudo; only the install step uses sudo" >&2; \
+		exit 1; \
+	fi
+
+install-system: check-not-sudo build
+	@if [ "$$(id -u)" -eq 0 ]; then \
+		install -d "$(SYSTEM_BINDIR)"; \
+		install -m 0755 "$(BINARY)" "$(SYSTEM_BINDIR)/$(BINARY)"; \
+	else \
+		sudo install -d "$(SYSTEM_BINDIR)"; \
+		sudo install -m 0755 "$(BINARY)" "$(SYSTEM_BINDIR)/$(BINARY)"; \
+	fi
+	@echo "installed $(SYSTEM_BINDIR)/$(BINARY)"
 
 uninstall:
 	@rm -f "$(BINDIR)/$(BINARY)"

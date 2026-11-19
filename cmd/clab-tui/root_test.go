@@ -116,6 +116,13 @@ func TestRootCmdRegistersDirAndFileFlags(t *testing.T) {
 	}
 }
 
+func TestRootCmdRegistersSudoFlag(t *testing.T) {
+	cmd := newRootCmd()
+	if cmd.Flags().Lookup("sudo") == nil {
+		t.Fatal("expected --sudo flag")
+	}
+}
+
 func TestRootCmdDirFileMutuallyExclusive(t *testing.T) {
 	cmd := newRootCmd()
 	cmd.SetArgs([]string{"--dir", "/tmp", "--file", "/tmp/lab.clab.yml"})

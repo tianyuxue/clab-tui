@@ -132,6 +132,7 @@ func runTUI(opts runOptions) error {
 func newRootCmd() *cobra.Command {
 	var dir string
 	var file string
+	var sudoFlag bool
 	cmd := &cobra.Command{
 		Use:           "clab-tui",
 		Short:         "terminal UI for containerlab",
@@ -139,6 +140,9 @@ func newRootCmd() *cobra.Command {
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if shouldElevate(sudoFlag, os.Geteuid()) {
+				return elevate(os.Args[1:])
+			}
 			opts, err := resolveRunOptions(dir, file)
 			if err != nil {
 				return err
@@ -148,5 +152,6 @@ func newRootCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&dir, "dir", "", "directory to scan for .clab.yml files (default: current dir)")
 	cmd.Flags().StringVar(&file, "file", "", "open a single .clab.yml topology file directly")
+	cmd.Flags().BoolVar(&sudoFlag, "sudo", false, "re-run as root via sudo")
 	return cmd
 }

@@ -15,7 +15,7 @@ to grant Docker access, containerlab SUID, or trace capabilities.
 ## "limited mode" in the status bar
 
 containerlab privileges are unavailable, so live interface state cannot be read.
-Browsing still works. Run with `sudo` or enable containerlab SUID for full data.
+Browsing still works. Run `clab-tui --sudo` or enable containerlab SUID for full data.
 
 ## Links show UNKNOWN
 
@@ -24,7 +24,7 @@ not that the link is down. See [Permissions](permissions.md).
 
 ## Docker permission denied
 
-Add your user to the `docker` group and re-login, or run with `sudo`:
+Add your user to the `docker` group and re-login, or run `clab-tui --sudo`:
 
 ```bash
 sudo usermod -aG docker "$USER"
